@@ -1,6 +1,6 @@
 // gcc -std=c++11 -g mqtt.cpp -o mqtt -lstdc++ -lmosquitto
 
-// mosquitto_pub -h localhost -t kitchen/coffeemaker -m "on" -q 1
+// mosquitto_pub -h localhost -t test/testing -m "on" -q 1
 // mosquitto_sub -h localhost -t test/testing -q 1
 // https://cedalo.com/blog/mqtt-subscribe-publish-mosquitto-pub-sub-example/
 

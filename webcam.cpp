@@ -1,8 +1,9 @@
-// g++ -o webcam_oop_dual webcam_oop_dual.cpp `pkg-config --cflags --libs opencv4` -std=c++11
+// g++ -o webcam webcam.cpp `pkg-config --cflags --libs opencv4` -std=c++11
 
 #include "opencv2/opencv.hpp"
 #include <iostream>
 #include <thread>
+#include<unistd.h> 
 
 using namespace std;
 using namespace cv;
