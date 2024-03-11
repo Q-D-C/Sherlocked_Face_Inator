@@ -5,17 +5,20 @@
 #include <thread>
 #include <unistd.h>
 
-#define FRAMEWIDTH 320
+#define FRAMEWIDTH 320 
 #define FRAMEHEIGHT 320
 
 #define AMOUNTPLAYERS 1
-#define EXPANSIONPIXELS 50
+#define EXPANSIONPIXELS 0
 
+#define YOLO8CONFIG "/home/nino/facemodels/deploy.prototxt"
+#define YOLO4CONFIG "/home/nino/face-detection-yolov4-tiny-master/yolo/yolov4-tiny-3l.cfg"
 #define YOLOCONFIG "/home/nino/facemodels/cfg/yolov3-face.cfg"
+
+#define YOLO8WEIGHTS "/home/nino/facemodels/res10_300x300_ssd_iter_140000_fp16.caffemodel"
+#define YOLO4WEIGHTS "/home/nino/face-detection-yolov4-tiny-master/yolo/yolov4-tiny-3l_best.weights"
 #define YOLOWEIGHTS "/home/nino/facemodels/model-weights/yolov3-wider_16000.weights"
 #define OUTPUTIMAGESLOCATION "/home/nino/Sherlocked_Face_Inator/FACES"
-
-
 
 bool show_frame = true;
 
@@ -277,8 +280,6 @@ int main()
     // Use IP camera if needed
     // FaceRecognitionHandler IPcamFaceRecognition(CAMERAIP);
     // IPcamFaceRecognition.startCapture();
-
-    // Main thread can perform other tasks if needed
 
     // Wait for the capture threads to finish
     webcamFaceRecognition.stopCapture();
