@@ -8,6 +8,7 @@
 #include <iostream>
 #include <mosquitto.h>
 #include <cstring>
+#include <fstream>
 #include "nlohmann/json.hpp"
 
 using json = nlohmann::json;
@@ -31,12 +32,22 @@ public:
 
         mosquitto_message_callback_set(mosq, message_callback);
 
+        // Initialize the outputFiles unordered_map
+        outputFiles.insert({"numPlayers", std::ofstream("numPlayers.txt", std::ofstream::out)});
+        outputFiles.insert({"gameStart", std::ofstream("gameStart.txt", std::ofstream::out)});
+
         connect();
         subscribe(topic);
     }
 
     ~MosquittoClient()
     {
+        // Close the files in the destructor
+        for (auto &file : outputFiles)
+        {
+            file.second.close();
+        }
+
         mosquitto_destroy(mosq);
         mosquitto_lib_cleanup();
     }
@@ -85,52 +96,125 @@ public:
         return output;
     }
 
+    static void setNumberPlayers(const std::string &value) { numberPlayers = value; }
+
+    static void setScanningComplete(const std::string &value) { scanningComplete = value; }
+
+    static void setGameStart(const std::string &value) { gameStart = value; }
+
+    static std::string getNumberPlayers() { return numberPlayers; }
+
+    static std::string getScanningComplete() { return scanningComplete; }
+
+    static std::string getGameStart() { return gameStart; }
+
 private:
     struct mosquitto *mosq;
+    static std::string numberPlayers;
+    static std::string scanningComplete;
+    static std::string gameStart;
 
-    static void message_callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *message)
+    std::unordered_map<std::string, std::ofstream> outputFiles;
+
+    static void fileWriter(std::string value, std::string name)
     {
-        if (message->payloadlen)
+        std::string fileName;
+
+        fileName = name + ".txt";
+
+        std::ofstream outFile(fileName);
+        if (outFile.is_open())
         {
-            std::cout << "Received message on topic '" << message->topic << "': " << (char *)message->payload << std::endl;
-
-            // Convert payload to string
-            std::string payloadString((char *)message->payload);
-
-            std::cout << "Received payload: " << payloadString << std::endl;
-
-            // Call the function to deconstruct the message
-            deconstructMessage(payloadString);
+            outFile << value;
+            outFile.close();
+            std::cout << "Value has been stored in the file." << std::endl;
         }
         else
         {
-            std::cout << "Received empty message on topic '" << message->topic << "'" << std::endl;
+            std::cerr << "Unable to open the file." << std::endl;
         }
     }
 
-    static void deconstructMessage(const std::string &jsonString)
+    static void doStuff(json Data)
     {
         try
         {
-            // Parse the JSON string
-            json j = json::parse(jsonString);
 
-            // Iterate through key-value pairs
-            for (auto it = j.begin(); it != j.end(); ++it)
+            // Access jsonData and perform actions based on keys
+            if (Data.count("numPlayers") != 0)
             {
-                const std::string &key = it.key();
-                const json &value = it.value();
-
-                // Print key and value
-                std::cout << "Key: " << key << ", Value: " << value << std::endl;
+                // Key exists, extract the value
+                numberPlayers = Data["numPlayers"];
+                std::cout << "Value for key numPlayers:" << numberPlayers << std::endl;
+                fileWriter(numberPlayers, "numPlayers");
+            }
+            else if (Data.count("gameStart") != 0)
+            {
+                // Key exists, extract the value
+                gameStart = Data["gameStart"];
+                std::cout << "Value for key gameStart: " << gameStart << std::endl;
+                fileWriter(gameStart, "gameStart");
+            }
+            else
+            {
+                std::cout << "no known key found" << std::endl;
             }
         }
+
         catch (const std::exception &e)
         {
             std::cerr << "Error parsing JSON: " << e.what() << std::endl;
         }
     }
+
+    static void
+    message_callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *message)
+    {
+        json recievedData;
+        if (message->payloadlen)
+        {
+            // Assuming the received message is a JSON string
+            std::string jsonStr(static_cast<const char *>(message->payload), message->payloadlen);
+
+            try
+            {
+                // Parse the received JSON string
+                recievedData = nlohmann::json::parse(jsonStr);
+                // Now 'receivedJson' contains the parsed JSON data
+
+                std::cout << "recieved json: " << recievedData << std::endl;
+
+                // Call doStuff with the payload string
+                doStuff(recievedData);
+            }
+            catch (const std::exception &e)
+            {
+                std::cerr << "Error parsing JSON: " << e.what() << std::endl;
+            }
+        }
+    }
+
+    static json deconstructMessage(const std::string &jsonString)
+    {
+        json messageData;
+
+        try
+        {
+            // Parse the JSON string
+            messageData = json::parse(jsonString);
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "Error parsing JSON: " << e.what() << std::endl;
+        }
+
+        return messageData;
+    }
 };
+
+std::string MosquittoClient::numberPlayers = "0";
+std::string MosquittoClient::scanningComplete = "0";
+std::string MosquittoClient::gameStart = "0";
 
 int main()
 {
@@ -140,7 +224,7 @@ int main()
 
     mosquittoClient.askPlayers();
 
-    mosquittoClient.makeMessage("info", "setPlayers", "0");
+    // mosquittoClient.makeMessage("info", "setPlayers", "0");
 
     mosquittoClient.loopForever();
 
