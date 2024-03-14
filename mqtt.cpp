@@ -7,7 +7,6 @@
 
 #include <iostream>
 #include <mosquitto.h>
-// #include <cstring>
 #include <fstream>
 #include <thread>
 #include "nlohmann/json.hpp"
@@ -18,6 +17,7 @@ using json = nlohmann::json;
 #define STARTKEY "gameStart"
 #define PLAYERSKEY "numPlayers"
 
+// Define gegevens for MQTT connection
 const char *broker_address = "127.0.0.1";
 const int broker_port = 1883;
 const char *topic = "alch/FaceInator";
@@ -29,30 +29,29 @@ class MosquittoClient
 public:
     MosquittoClient() : mosq(mosquitto_new(NULL, true, nullptr))
     {
+        // Check if Mosquitto instance was created successfully
         if (!mosq)
         {
             std::cerr << "Error: Unable to create Mosquitto instance." << std::endl;
             std::exit(1);
         }
+        // Set message callback function
 
         mosquitto_message_callback_set(mosq, message_callback);
 
-        connect();
+        // Subscribe to the specified topic and connect to MQTT
         subscribe(topic);
+        connect();
     }
 
     ~MosquittoClient()
     {
-        // Close the files in the destructor
-        for (auto &file : outputFiles)
-        {
-            file.second.close();
-        }
-
+        // Destroy Mosquitto instance and clean up
         mosquitto_destroy(mosq);
         mosquitto_lib_cleanup();
     }
 
+    // Connect to the MQTT broker
     void connect()
     {
         if (mosquitto_connect(mosq, broker_address, broker_port, 60) != MOSQ_ERR_SUCCESS)
@@ -62,41 +61,47 @@ public:
         }
     }
 
+    // Subscribe to a specific MQTT topic
     void subscribe(const char *topic)
     {
-        if (mosquitto_subscribe(mosq, nullptr, topic, 0) != MOSQ_ERR_SUCCESS)
+        if (mosquitto_subscribe(mosq, nullptr, topic, 1) != MOSQ_ERR_SUCCESS)
         {
             std::cerr << "Error: Unable to subscribe to the topic." << std::endl;
             std::exit(1);
         }
     }
 
+    // Subscribe to a specific MQTT topic
     void publish(const char *topic, const char *message)
     {
-        mosquitto_publish(mosq, nullptr, topic, strlen(message), message, 0, false);
+        mosquitto_publish(mosq, nullptr, topic, strlen(message), message, 1, false);
     }
 
+    // Listen for MQTT messages for ever and ever and ever and ever and ever and ever and ever
     void listenForever()
     {
         mosquitto_loop_forever(mosq, -1, 1);
     }
 
+    // Main logic of the code, see this as the game loooop
     void logic()
     {
         while (1)
         {
-
+            // If the game has started but we dont know the player count, ask about the player count.
             if (gameStart != "0" && numberPlayers == "0" && PlayersHasBeenAsked == false)
             {
                 this->askPlayers();
                 PlayersHasBeenAsked = true;
-                std::cout << "player amount has been aksed" << std::endl;
+                std::cout << "Player amount has been aksed" << std::endl;
             }
 
+            // Check if scanning has been completed
             this->checkScan();
         }
     }
 
+    // Ask ACE for the player count
     void askPlayers()
     {
         char buffer[128];
@@ -104,6 +109,7 @@ public:
         this->publish(serverTopic, buffer);
     }
 
+    // Construct a JSON message following the Sherlocked guidelines
     std::string makeMessage(std::string methodinfo, std::string function, std::string functionmessage)
     {
         std::string sender = _cfg_name;
@@ -113,16 +119,13 @@ public:
         return output;
     }
 
+    // Lots of getters and setters, probbly not needed but here just in case!
     static void setNumberPlayers(const std::string &value) { numberPlayers = value; }
-
     static void setScanningComplete(const std::string &value) { scanningComplete = value; }
-
     static void setGameStart(const std::string &value) { gameStart = value; }
 
     static std::string getNumberPlayers() { return numberPlayers; }
-
     static std::string getScanningComplete() { return scanningComplete; }
-
     static std::string getGameStart() { return gameStart; }
 
 private:
@@ -132,14 +135,14 @@ private:
     static std::string gameStart;
     bool PlayersHasBeenAsked = false;
 
-    std::unordered_map<std::string, std::ofstream> outputFiles;
-
+    // Write value to a file
     static void fileWriter(std::string value, std::string name)
     {
+        // Construct the file name
         std::string fileName;
-
         fileName = name + ".txt";
 
+        // Place the value
         std::ofstream outFile(fileName);
         if (outFile.is_open())
         {
@@ -153,12 +156,14 @@ private:
         }
     }
 
+    // Read value from a file
     std::string fileReader(std::string name)
     {
+        // Construct the fileName
         std::string fileName;
-
         fileName = name + ".txt";
 
+        // Carfully place the value
         std::string Value;
         std::ifstream inFile(fileName);
         if (inFile.is_open())
@@ -174,6 +179,7 @@ private:
         return Value;
     }
 
+    // Check if scanning (done externally) has been completed
     void checkScan()
     {
 
@@ -181,14 +187,13 @@ private:
 
         Value = fileReader(SCANNINGKEY);
 
-        // std::cout << Value << std::endl;
-
         if (Value == "1")
         {
             std::cout << "SCANNING HASZ BEEN CXOMPLETED" << std::endl;
-            char buffer[128];
-            snprintf(buffer, sizeof(buffer), "{\"sender\":\"%s\",\"scanningComplete\":\"1\",\"method\":\"info\"}", _cfg_name);
-            this->publish(serverTopic, buffer);
+            // Tell ACE we are allll done here
+            makeMessage("info", SCANNINGKEY, "1");
+
+            // Reset all the states, ready for another round
             gameStart = "0";
             numberPlayers = "0";
             PlayersHasBeenAsked = false;
@@ -196,11 +201,11 @@ private:
         }
     }
 
+    // Process recieved messages
     static void doStuff(json Data)
     {
         try
         {
-
             // Access jsonData and perform actions based on keys
             if (Data.count(PLAYERSKEY) != 0)
             {
@@ -228,6 +233,7 @@ private:
         }
     }
 
+    // Callback function for MQTT messages
     static void message_callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *message)
     {
         json recievedData;
@@ -240,11 +246,9 @@ private:
             {
                 // Parse the received JSON string
                 recievedData = nlohmann::json::parse(jsonStr);
-                // Now 'receivedJson' contains the parsed JSON data
-
                 std::cout << "recieved json: " << recievedData << std::endl;
 
-                // Call doStuff with the payload string
+                // doStuff with the recieved string
                 doStuff(recievedData);
             }
             catch (const std::exception &e)
@@ -272,24 +276,24 @@ private:
     }
 };
 
+// Static member variable initialization
 std::string MosquittoClient::numberPlayers = "0";
 std::string MosquittoClient::scanningComplete = "0";
 std::string MosquittoClient::gameStart = "0";
 
 int main()
 {
+    // Initialize Mosquitto library
     mosquitto_lib_init();
 
+    // Create an instance of MosquittoClient
     MosquittoClient mosquittoClient;
 
-    // mosquittoClient.askPlayers();
-
-    // mosquittoClient.makeMessage("info", "setPlayers", "0");
-
-    // Create a new thread to run mosquitto_loop_forever()
+    // Create a new thread to run MQTT for ever and ever and ever and ever and ever and ever
     std::thread mqttThread([&]()
                            { mosquittoClient.listenForever(); });
 
+    // Run the main logic of the application
     mosquittoClient.logic();
 
     // Join the thread with the main thread
