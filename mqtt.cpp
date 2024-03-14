@@ -7,11 +7,16 @@
 
 #include <iostream>
 #include <mosquitto.h>
-#include <cstring>
+// #include <cstring>
 #include <fstream>
+#include <thread>
 #include "nlohmann/json.hpp"
 
 using json = nlohmann::json;
+
+#define SCANNINGKEY "scanningComplete"
+#define STARTKEY "gameStart"
+#define PLAYERSKEY "numPlayers"
 
 const char *broker_address = "127.0.0.1";
 const int broker_port = 1883;
@@ -31,10 +36,6 @@ public:
         }
 
         mosquitto_message_callback_set(mosq, message_callback);
-
-        // Initialize the outputFiles unordered_map
-        outputFiles.insert({"numPlayers", std::ofstream("numPlayers.txt", std::ofstream::out)});
-        outputFiles.insert({"gameStart", std::ofstream("gameStart.txt", std::ofstream::out)});
 
         connect();
         subscribe(topic);
@@ -75,16 +76,32 @@ public:
         mosquitto_publish(mosq, nullptr, topic, strlen(message), message, 0, false);
     }
 
-    void loopForever()
+    void listenForever()
     {
         mosquitto_loop_forever(mosq, -1, 1);
+    }
+
+    void logic()
+    {
+        while (1)
+        {
+
+            if (gameStart != "0" && numberPlayers == "0" && PlayersHasBeenAsked == false)
+            {
+                this->askPlayers();
+                PlayersHasBeenAsked = true;
+                std::cout << "player amount has been aksed" << std::endl;
+            }
+
+            this->checkScan();
+        }
     }
 
     void askPlayers()
     {
         char buffer[128];
         snprintf(buffer, sizeof(buffer), "{\"sender\":\"%s\",\"numPlayers\":\"null\",\"method\":\"get\"}", _cfg_name);
-        publish(serverTopic, buffer);
+        this->publish(serverTopic, buffer);
     }
 
     std::string makeMessage(std::string methodinfo, std::string function, std::string functionmessage)
@@ -113,6 +130,7 @@ private:
     static std::string numberPlayers;
     static std::string scanningComplete;
     static std::string gameStart;
+    bool PlayersHasBeenAsked = false;
 
     std::unordered_map<std::string, std::ofstream> outputFiles;
 
@@ -127,11 +145,54 @@ private:
         {
             outFile << value;
             outFile.close();
-            std::cout << "Value has been stored in the file." << std::endl;
+            std::cout << "Value has been stored in " << fileName << std::endl;
         }
         else
         {
-            std::cerr << "Unable to open the file." << std::endl;
+            std::cerr << "Unable to open the file for writing." << std::endl;
+        }
+    }
+
+    std::string fileReader(std::string name)
+    {
+        std::string fileName;
+
+        fileName = name + ".txt";
+
+        std::string Value;
+        std::ifstream inFile(fileName);
+        if (inFile.is_open())
+        {
+            inFile >> Value;
+            inFile.close();
+        }
+        else
+        {
+            std::cerr << "Unable to open the file for reading." << std::endl;
+        }
+
+        return Value;
+    }
+
+    void checkScan()
+    {
+
+        std::string Value;
+
+        Value = fileReader(SCANNINGKEY);
+
+        // std::cout << Value << std::endl;
+
+        if (Value == "1")
+        {
+            std::cout << "SCANNING HASZ BEEN CXOMPLETED" << std::endl;
+            char buffer[128];
+            snprintf(buffer, sizeof(buffer), "{\"sender\":\"%s\",\"scanningComplete\":\"1\",\"method\":\"info\"}", _cfg_name);
+            this->publish(serverTopic, buffer);
+            gameStart = "0";
+            numberPlayers = "0";
+            PlayersHasBeenAsked = false;
+            fileWriter("0", SCANNINGKEY);
         }
     }
 
@@ -141,19 +202,19 @@ private:
         {
 
             // Access jsonData and perform actions based on keys
-            if (Data.count("numPlayers") != 0)
+            if (Data.count(PLAYERSKEY) != 0)
             {
                 // Key exists, extract the value
-                numberPlayers = Data["numPlayers"];
-                std::cout << "Value for key numPlayers:" << numberPlayers << std::endl;
-                fileWriter(numberPlayers, "numPlayers");
+                numberPlayers = Data[PLAYERSKEY];
+                std::cout << "Value for key numPlayers: " << numberPlayers << std::endl;
+                fileWriter(numberPlayers, PLAYERSKEY);
             }
-            else if (Data.count("gameStart") != 0)
+            else if (Data.count(STARTKEY) != 0)
             {
                 // Key exists, extract the value
-                gameStart = Data["gameStart"];
+                gameStart = Data[STARTKEY];
                 std::cout << "Value for key gameStart: " << gameStart << std::endl;
-                fileWriter(gameStart, "gameStart");
+                fileWriter(gameStart, STARTKEY);
             }
             else
             {
@@ -167,8 +228,7 @@ private:
         }
     }
 
-    static void
-    message_callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *message)
+    static void message_callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *message)
     {
         json recievedData;
         if (message->payloadlen)
@@ -222,11 +282,18 @@ int main()
 
     MosquittoClient mosquittoClient;
 
-    mosquittoClient.askPlayers();
+    // mosquittoClient.askPlayers();
 
     // mosquittoClient.makeMessage("info", "setPlayers", "0");
 
-    mosquittoClient.loopForever();
+    // Create a new thread to run mosquitto_loop_forever()
+    std::thread mqttThread([&]()
+                           { mosquittoClient.listenForever(); });
+
+    mosquittoClient.logic();
+
+    // Join the thread with the main thread
+    mqttThread.join();
 
     return 0;
 }
