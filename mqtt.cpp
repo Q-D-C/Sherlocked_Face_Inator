@@ -24,6 +24,41 @@ const char *topic = "alch/FaceInator";
 const char *serverTopic = "alch/server";
 char _cfg_name[] = "FaceInator";
 
+class FileHandler
+{
+public:
+    static void writeToFile(const std::string &value, const std::string &name)
+    {
+        std::ofstream outFile(name + ".txt");
+        if (outFile.is_open())
+        {
+            outFile << value;
+            outFile.close();
+            std::cout << "Value has been stored in " << name << ".txt" << std::endl;
+        }
+        else
+        {
+            std::cerr << "Unable to open the file for writing." << std::endl;
+        }
+    }
+
+    static std::string readFromFile(const std::string &name)
+    {
+        std::ifstream inFile(name + ".txt");
+        std::string value;
+        if (inFile.is_open())
+        {
+            inFile >> value;
+            inFile.close();
+        }
+        else
+        {
+            std::cerr << "Unable to open the file for reading." << std::endl;
+        }
+        return value;
+    }
+};
+
 class MosquittoClient
 {
 public:
@@ -40,8 +75,8 @@ public:
         mosquitto_message_callback_set(mosq, message_callback);
 
         // Subscribe to the specified topic and connect to MQTT
-        subscribe(topic);
         connect();
+        subscribe(topic);
     }
 
     ~MosquittoClient()
@@ -138,45 +173,13 @@ private:
     // Write value to a file
     static void fileWriter(std::string value, std::string name)
     {
-        // Construct the file name
-        std::string fileName;
-        fileName = name + ".txt";
-
-        // Place the value
-        std::ofstream outFile(fileName);
-        if (outFile.is_open())
-        {
-            outFile << value;
-            outFile.close();
-            std::cout << "Value has been stored in " << fileName << std::endl;
-        }
-        else
-        {
-            std::cerr << "Unable to open the file for writing." << std::endl;
-        }
+        FileHandler::writeToFile(value, name);
     }
 
     // Read value from a file
     std::string fileReader(std::string name)
     {
-        // Construct the fileName
-        std::string fileName;
-        fileName = name + ".txt";
-
-        // Carfully place the value
-        std::string Value;
-        std::ifstream inFile(fileName);
-        if (inFile.is_open())
-        {
-            inFile >> Value;
-            inFile.close();
-        }
-        else
-        {
-            std::cerr << "Unable to open the file for reading." << std::endl;
-        }
-
-        return Value;
+        return FileHandler::readFromFile(name);
     }
 
     // Check if scanning (done externally) has been completed

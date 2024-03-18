@@ -2,10 +2,11 @@
 
 #include "opencv2/opencv.hpp"
 #include <iostream>
+#include <fstream>
 #include <thread>
 #include <unistd.h>
 
-#define FRAMEWIDTH 320 
+#define FRAMEWIDTH 320
 #define FRAMEHEIGHT 320
 
 #define AMOUNTPLAYERS 1
@@ -24,6 +25,41 @@ bool show_frame = true;
 
 using namespace std;
 using namespace cv;
+
+class FileHandler
+{
+public:
+    static void writeToFile(const std::string &value, const std::string &name)
+    {
+        std::ofstream outFile(name + ".txt");
+        if (outFile.is_open())
+        {
+            outFile << value;
+            outFile.close();
+            std::cout << "Value has been stored in " << name << ".txt" << std::endl;
+        }
+        else
+        {
+            std::cerr << "Unable to open the file for writing." << std::endl;
+        }
+    }
+
+    static std::string readFromFile(const std::string &name)
+    {
+        std::ifstream inFile(name + ".txt");
+        std::string value;
+        if (inFile.is_open())
+        {
+            inFile >> value;
+            inFile.close();
+        }
+        else
+        {
+            std::cerr << "Unable to open the file for reading." << std::endl;
+        }
+        return value;
+    }
+};
 
 class WebcamHandler
 {
