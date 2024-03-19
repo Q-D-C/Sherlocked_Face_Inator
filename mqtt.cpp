@@ -197,10 +197,13 @@ private:
             makeMessage("info", SCANNINGKEY, "1");
 
             // Reset all the states, ready for another round
-            gameStart = "0";
-            numberPlayers = "0";
+            // gameStart = "0";
+            // numberPlayers = "0";
             PlayersHasBeenAsked = false;
             fileWriter("0", SCANNINGKEY);
+            fileWriter("0", PLAYERSKEY);
+            fileWriter("0", STARTKEY);
+
         }
     }
 
