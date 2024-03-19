@@ -7,17 +7,22 @@
 #include <unistd.h>
 #include <cstdio>
 
+// Values for the size of the frame
 #define FRAMEWIDTH 320
 #define FRAMEHEIGHT 320
 
+// Define how much room (in pixels) you want around the found face
 #define EXPANSIONPIXELS 50
 
+// Define a value for how blurry the picture is allowed to be, the lower the blurrier
 #define BLURRYNESSTHRESHHOLD 100
 
+// keys for what the files are called
 #define SCANNINGKEY "scanningComplete"
 #define STARTKEY "gameStart"
 #define PLAYERSKEY "numPlayers"
 
+// paths to the YOLO configs and weighsts
 #define YOLO8CONFIG "/home/nino/facemodels/deploy.prototxt"
 #define YOLO4CONFIG "/home/nino/face-detection-yolov4-tiny-master/yolo/yolov4-tiny-3l.cfg"
 #define YOLOCONFIG "/home/nino/facemodels/cfg/yolov3-face.cfg"
@@ -25,19 +30,21 @@
 #define YOLO8WEIGHTS "/home/nino/facemodels/res10_300x300_ssd_iter_140000_fp16.caffemodel"
 #define YOLO4WEIGHTS "/home/nino/face-detection-yolov4-tiny-master/yolo/yolov4-tiny-3l_best.weights"
 #define YOLOWEIGHTS "/home/nino/facemodels/model-weights/yolov3-wider_16000.weights"
+
+// Path to where to final faces will be saved
 #define OUTPUTIMAGESLOCATION "/home/nino/Sherlocked_Face_Inator/FACES"
+
+// Do you want to see what the webcam sees, yay or nay?
+bool showFrame = false;
 
 using namespace std;
 using namespace cv;
 
+// Class for handling file operations
 class FileHandler
 {
 public:
-    static bool isFileEmpty(const std::string &filename)
-    {
-        std::ifstream file(filename);
-        return file.peek() == std::ifstream::traits_type::eof();
-    }
+    // Write data to a file
     static void writeToFile(const std::string &value, const std::string &name)
     {
         std::ofstream outFile(name + ".txt");
@@ -53,6 +60,7 @@ public:
         }
     }
 
+    // Read data from a file
     static std::string readFromFile(const std::string &name)
     {
         std::ifstream inFile(name + ".txt");
@@ -61,7 +69,7 @@ public:
         {
             inFile >> value;
             inFile.close();
-        }
+        } // if the file is empty (in some edge cases) return 0
         else if (inFile.peek() == std::ifstream::traits_type::eof())
         {
             value = "0";
@@ -74,12 +82,13 @@ public:
     }
 };
 
+// Class for handling webcam operations
 class WebcamHandler
 {
 public:
     vector<Rect> faces; // Vector to store the face locations
 
-    // making sure that you can init the webcam handler with a hardware cam and also a IP cam
+    // Making sure that you can init the webcam handler with a hardware cam and also a IP cam
 
     WebcamHandler() : isIPCamera(false), cameraIndex(0), cap(0, CAP_V4L) {}
 
@@ -95,7 +104,7 @@ public:
 
     void stopCapture()
     {
-        // Stop capturing said frames
+        // Stop capturing frames if thread is joinable
         if (captureThread.joinable())
         {
             captureThread.join();
@@ -132,6 +141,7 @@ protected:
     virtual void processFrame(Mat &frame) = 0;
 
 private:
+    // Function to capture frames for EVER
     void captureFrames()
     {
         for (;;)
@@ -142,17 +152,12 @@ private:
                 break;           // stop if fails
             processFrame(frame); // process the frame
             if (waitKey(10) == 27)
-                break; // stop capturing by pressing ESC
-                       // print results
-            // for (int i = 0; i < faces.size(); i++)
-            // {
-            //     std::cout << faces[i] << " ";
-            // }
-            // std::cout << std::endl;
+                break; // stop capturing by pressing ESC, hopefully never needed but just in case
         }
     }
 };
 
+// Class for handling face recognition
 class FaceRecognitionHandler : public WebcamHandler
 {
 
@@ -160,7 +165,7 @@ public:
     // Constructor initializes YOLO model
     FaceRecognitionHandler(int cameraIndex) : WebcamHandler(cameraIndex)
     {
-        // yolo_net = cv::dnn::readNetFromDarknet("yolov3-face.cfg", "yolov3-wider_16000.weights");
+        // confirm the correct weights and configs
         yolo_net = cv::dnn::readNetFromDarknet(YOLOCONFIG, YOLOWEIGHTS);
         yolo_net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
         yolo_net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
@@ -172,13 +177,17 @@ public:
         }
     }
 
+    // Function to perform face recognition logic
     void logisch()
     {
         while (1)
         {
+            // Check if the game has started and how many players there are
             this->CheckGameState();
             if (facesCaptured)
             {
+                // When there are the correct amount of faces detected check if they are usable
+
                 bool isAFaceBlurry = false;
 
                 for (int i = 0; i < numberPlayers; i++)
@@ -191,29 +200,31 @@ public:
                     std::cout << "blurryness of face nr " << i << " is " << blurrness << std::endl;
                     if (blurrness <= BLURRYNESSTHRESHHOLD)
                     {
-                        // delete captured faces
+                        // If one face is too blurry stop checking the rest.
                         isAFaceBlurry = true;
                         break;
                     }
                 }
                 if (isAFaceBlurry)
                 {
+                    // Delete captured faces when they are not up to standard
                     for (int i = 0; i < numberPlayers; i++)
                     {
                         std::string filename;
                         filename = "face_" + std::to_string(i) + ".jpg";
                         std::remove(filename.c_str());
-                    }
+                    } // Reset the variable to retry capturing all faces
                     facesCaptured = false;
                 }
                 else
                 {
-                    // Write to file
+                    // If the faces where captured correctly, tell the system that it has been completed and reset the an idle state
                     FileHandler::writeToFile("1", SCANNINGKEY);
                     facesCaptured = false;
-                    numberPlayers = 0;    // Reset number of players
-                    gameStart = 0;        // Reset game start flag
-                    readyToStart = false; // Reset ready to start flag
+                    numberPlayers = 0;
+                    gameStart = 0;
+                    readyToStart = false;
+                    // TO:DO, Do creepy AI stuff
                 }
             }
         }
@@ -225,6 +236,7 @@ private:
     bool readyToStart = false;
     bool facesCaptured = false;
 
+    // Function to check the bluriness of a face
     double checkBluriness(const cv::Mat &image)
     {
         // Convert the image to grayscale
@@ -244,10 +256,9 @@ private:
         return variance;
     }
 
-    // init the YOLO neural network
-    cv::dnn::Net yolo_net;
 
-    // Process each frame for face recognition
+    // Initialize YOLO neural network and process each frame for face recognition
+    cv::dnn::Net yolo_net;
     void processFrame(Mat &frame) override
     {
         if (readyToStart)
@@ -263,7 +274,6 @@ private:
             yolo_net.forward(outs, getOutputNames(yolo_net));
 
             // post process just the frames that have faces
-
             postprocess(frame, outs, faces);
 
             // std::cout << "Number of faces found: " << faces.size() << std::endl;
@@ -275,8 +285,9 @@ private:
             }
         }
 
-        // Display the frame with face recognition
-        imshow("YOLO Face Recognition", frame);
+        // Display the frame, if wanted
+        if (showFrame)
+            imshow("YOLO Face Recognition", frame);
     }
 
     // Get names of YOLO output layers
@@ -301,6 +312,7 @@ private:
     // Post-process YOLO output for face recognition
     void postprocess(const cv::Mat &frame, const vector<cv::Mat> &outs, vector<cv::Rect> &faces)
     {
+        // define how sure it has to be to call it a face
         float confThreshold = 0.5;
         float nmsThreshold = 0.4;
 
@@ -353,6 +365,7 @@ private:
         CheckAndSafeFaces(indices, boxes, frame);
     }
 
+    // Check if the correct amount of faces have been detected
     void CheckAndSafeFaces(vector<int> indices, vector<cv::Rect> boxes, const cv::Mat &frame)
     {
 
@@ -372,7 +385,7 @@ private:
 
                 // Generate a unique filename
                 stringstream filename;
-                // PUT IN FOLDER
+                // UNCOMMENT IF YOU WANT TO PUT IN FOLDER INSTEAD
                 // filename << OUTPUTIMAGESLOCATION << "/face_" << i << ".jpg";
                 filename << "face_" << i << ".jpg";
 
@@ -389,6 +402,8 @@ private:
             faces.push_back(boxes[idx]);
         }
     }
+
+    // Check game state from files
     void CheckGameState()
     {
         // Read content from files
@@ -399,17 +414,14 @@ private:
         temp1.erase(std::remove_if(temp1.begin(), temp1.end(), ::isspace), temp1.end());
         temp2.erase(std::remove_if(temp2.begin(), temp2.end(), ::isspace), temp2.end());
 
-        // Check if the files are empty
-
-        // Convert to integers
         try
-        {
+        {// Another edge case scenario where the file might be empty, if so, return 0
             if (temp1.empty())
             {
                 numberPlayers = 0;
             }
             else
-            {
+            {// The value in the file is a string so make it an int
                 numberPlayers = std::stoi(temp1);
             }
             if (temp2.empty())
@@ -425,7 +437,6 @@ private:
         {
             // Handle invalid argument exception
             std::cerr << "Invalid argument: " << e.what() << std::endl;
-            // You can add more detailed error handling here if needed
             return;
         }
 
@@ -448,6 +459,7 @@ int main()
     FaceRecognitionHandler webcamFaceRecognition(0);
     webcamFaceRecognition.startCapture();
     webcamFaceRecognition.logisch();
+    
     // Use additional cameras if needed
     // FaceRecognitionHandler webcamFaceRecognition2(1);
     // webcamFaceRecognition2.startCapture();
