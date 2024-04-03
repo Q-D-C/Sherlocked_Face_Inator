@@ -10,11 +10,16 @@
 // Constants
 #define FRAMEWIDTH 320
 #define FRAMEHEIGHT 320
-#define EXPANSIONPIXELS 50
+#define EXPANSIONPIXELS 0
 #define BLURRYNESSTHRESHHOLD 100
 
-#define YOLOWEIGHTS "/home/nino/facemodels/model-weights/yolov3-wider_16000.weights"
-#define YOLOCONFIG "/home/nino/facemodels/cfg/yolov3-face.cfg"
+#define YOLO8WEIGHTS "/home/nino/facemodels/res10_300x300_ssd_iter_140000_fp16.caffemodel"
+#define YOLO4WEIGHTS "/home/nino/face-detection-yolov4-tiny-master/yolo/yolov4-tiny-3l_best.weights"
+#define YOLO3WEIGHTS "/home/nino/facemodels/model-weights/yolov3-wider_16000.weights"
+
+#define YOLO8CONFIG "/home/nino/facemodels/yolov8n-face.onnx"
+#define YOLO4CONFIG "/home/nino/face-detection-yolov4-tiny-master/yolo/yolov4-tiny-3l.cfg"
+#define YOLO3CONFIG "/home/nino/facemodels/cfg/yolov3-face.cfg"
 
 // keys for what the files are called
 #define SCANNINGKEY "scanningComplete"
@@ -22,7 +27,7 @@
 #define PLAYERSKEY "numPlayers"
 
 // Display the webcam output or not
-bool showFrame = false;
+bool showFrame = true;
 
 using namespace cv;
 using namespace std;
@@ -78,7 +83,7 @@ public:
     virtual ~IYoloModel() {}
 };
 
-// Concrete YOLO3 Model
+// YOLO3 Model
 class YoloModelV3 : public IYoloModel
 {
 private:
@@ -175,6 +180,191 @@ public:
             }
         }
         return names;
+    }
+};
+
+// YOLO4 Model
+class YoloModelV4 : public IYoloModel
+{
+private:
+    dnn::Net net;
+
+public:
+    void loadModel(const std::string &config, const std::string &weights) override
+    {
+        net = dnn::readNetFromDarknet(config, weights);
+        net.setPreferableBackend(dnn::DNN_BACKEND_OPENCV);
+        net.setPreferableTarget(dnn::DNN_TARGET_CPU);
+    }
+
+    std::vector<cv::Rect> detectFaces(const cv::Mat &frame) override
+    {
+
+        float confidenceThreshold = 0.5;
+        float nmsThreshold = 0.4;
+
+        // Prepare the frame for YOLO model
+        cv::Mat blob;
+        cv::dnn::blobFromImage(frame, blob, 1 / 255.0, cv::Size(FRAMEWIDTH, FRAMEHEIGHT), cv::Scalar(0, 0, 0), true, false);
+
+        // Set the blob as input to the network
+        net.setInput(blob);
+
+        // Forward pass to get the outputs
+        std::vector<cv::Mat> outs;
+        net.forward(outs, getOutputNames(net));
+
+        // Initialize vectors to hold detection results
+        std::vector<int> classIds;
+        std::vector<float> confidences;
+        std::vector<cv::Rect> boxes;
+
+        // Process the output
+        for (size_t i = 0; i < outs.size(); ++i)
+        {
+            // Scan through all the bounding boxes output from the network and keep only the ones with high confidence scores
+            float *data = (float *)outs[i].data;
+            for (int j = 0; j < outs[i].rows; ++j, data += outs[i].cols)
+            {
+                float confidence = data[4];
+                if (confidence > confidenceThreshold)
+                {
+                    int centerX = (int)(data[0] * frame.cols);
+                    int centerY = (int)(data[1] * frame.rows);
+                    int width = (int)(data[2] * frame.cols);
+                    int height = (int)(data[3] * frame.rows);
+                    int left = centerX - width / 2;
+                    int top = centerY - height / 2;
+
+                    // Expand the bounding box by adding/subtracting expansionPixels
+                    left = std::max(0, left - EXPANSIONPIXELS);
+                    top = std::max(0, top - EXPANSIONPIXELS);
+                    width = std::min(frame.cols - left, width + 2 * EXPANSIONPIXELS);
+                    height = std::min(frame.rows - top, height + 2 * EXPANSIONPIXELS);
+
+                    classIds.push_back(classIds.size()); // Assuming only one class (face)
+                    confidences.push_back(confidence);
+                    boxes.push_back(cv::Rect(left, top, width, height));
+                }
+            }
+        }
+
+        // Apply Non-Maximum Suppression to eliminate redundant overlapping boxes
+        std::vector<int> indices;
+        cv::dnn::NMSBoxes(boxes, confidences, confidenceThreshold, nmsThreshold, indices);
+
+        // Filter boxes based on NMS indices
+        std::vector<cv::Rect> faces;
+        for (int idx : indices)
+        {
+            faces.push_back(boxes[idx]);
+        }
+
+        return faces; // Return the list of faces after NMS
+    }
+
+    // Get names of YOLO output layers
+    vector<cv::String> getOutputNames(const cv::dnn::Net &net)
+    {
+        static vector<cv::String> names;
+        if (names.empty())
+        {
+            // retrieve all layer names from the yolo network and resize the name vector accordingly
+            vector<int> outLayers = net.getUnconnectedOutLayers();
+            vector<cv::String> layersNames = net.getLayerNames();
+            names.resize(outLayers.size());
+            // put all the names in the names vector
+            for (size_t i = 0; i < outLayers.size(); ++i)
+            {
+                names[i] = layersNames[outLayers[i] - 1];
+            }
+        }
+        return names;
+    }
+};
+
+// YOLOv8 Model
+class YoloModelV8 : public IYoloModel
+{
+private:
+    dnn::Net net;
+    float confThreshold;
+    float nmsThreshold;
+
+public:
+    YoloModelV8(float confThreshold = 0.45, float nmsThreshold = 0.5)
+        : confThreshold(confThreshold), nmsThreshold(nmsThreshold) {}
+
+    void loadModel(const std::string &modelPath, const std::string & /*configPath*/) override
+    {
+        this->net = cv::dnn::readNet(modelPath); // Only uses the model path
+        net.setPreferableBackend(dnn::DNN_BACKEND_OPENCV);
+        net.setPreferableTarget(dnn::DNN_TARGET_CPU);
+    }
+    std::vector<cv::Rect> detectFaces(const cv::Mat &frame) override
+    {
+        std::vector<cv::Rect> boxes;
+        std::vector<float> confidences;
+
+        // Create a blob from the input frame
+        Mat blob;
+        cv::dnn::blobFromImage(frame, blob, 1 / 255.0, Size(640, 640), Scalar(0, 0, 0), true, false);
+        net.setInput(blob);
+
+        // Forward pass to get the outputs
+        std::vector<Mat> outs;
+        net.forward(outs, net.getUnconnectedOutLayersNames());
+
+        for (auto &out : outs)
+        {
+            std::cout << "Output size: " << out.size << std::endl;
+            for (int i = 0; i < out.rows; ++i)
+            {
+                float *data = out.ptr<float>(i);
+                float confidence = data[1];
+                std::cout << "Detection " << i << ": Confidence = " << confidence << std::endl;
+            }
+        }
+
+        // Process each output layer
+        for (auto &out : outs)
+        {
+            // The output should have the shape [number_of_detections, 6]
+            // Each detection has the format [classId, confidence, x, y, width, height]
+            for (int i = 0; i < out.rows; ++i)
+            {
+                float *detection = out.ptr<float>(i);
+                float confidence = detection[1];
+
+                // Filter out weak detections by ensuring the confidence is greater than a minimum threshold
+                if (confidence > this->confThreshold)
+                {
+                    int centerX = static_cast<int>(detection[2] * frame.cols);
+                    int centerY = static_cast<int>(detection[3] * frame.rows);
+                    int width = static_cast<int>(detection[4] * frame.cols);
+                    int height = static_cast<int>(detection[5] * frame.rows);
+                    int left = centerX - width / 2;
+                    int top = centerY - height / 2;
+
+                    // Add the bounding box and confidence to their respective vectors
+                    boxes.push_back(cv::Rect(left, top, width, height));
+                    confidences.push_back(confidence);
+                }
+            }
+        }
+
+        // Apply Non-Maximum Suppression to eliminate redundant overlapping boxes
+        std::vector<int> indices;
+        cv::dnn::NMSBoxes(boxes, confidences, this->confThreshold, this->nmsThreshold, indices);
+
+        // Use indices to add the final set of bounding boxes to faces
+        std::vector<cv::Rect> faces;
+        for (int idx : indices)
+        {
+            faces.push_back(boxes[idx]);
+        }
+
+        return faces;
     }
 };
 
@@ -426,8 +616,8 @@ int main()
     try
     {
         // Setup YOLO model
-        auto yoloModel = std::make_unique<YoloModelV3>();
-        yoloModel->loadModel(YOLOCONFIG, YOLOWEIGHTS);
+        auto yoloModel = std::make_unique<YoloModelV4>();
+        yoloModel->loadModel(YOLO4CONFIG, YOLO4WEIGHTS);
 
         // Start webcam and face recognition
         FaceRecognitionHandler handler(0, std::move(yoloModel)); // Use camera index 0
