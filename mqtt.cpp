@@ -1,4 +1,4 @@
-// gcc -std=c++11 -g mqtt.cpp -o mqtt -lstdc++ -lmosquitto
+// gcc -std=c++14 -g mqtt.cpp -o mqtt -lstdc++ -lmosquitto
 
 // mosquitto_pub -h localhost -t test/testing -m "on" -q 1
 // mosquitto_sub -h localhost -t test/testing -q 1
@@ -13,9 +13,13 @@
 
 using json = nlohmann::json;
 
-#define SCANNINGKEY "scanningComplete"
-#define STARTKEY "gameStart"
-#define PLAYERSKEY "numPlayers"
+constexpr char SCANNINGKEY[] = "scanningComplete";
+constexpr char STARTKEY[] = "gameStart";
+constexpr char PLAYERSKEY[] = "numPlayers";
+
+constexpr int IDLE = 0;
+constexpr int PROCESSING = 1;
+constexpr int DONE = 2;
 
 // Define gegevens for MQTT connection
 const char *broker_address = "127.0.0.1";
@@ -62,14 +66,15 @@ public:
 class MosquittoClient
 {
 public:
-    MosquittoClient() : mosq(mosquitto_new(NULL, true, nullptr))
+    MosquittoClient()
     {
-        // Check if Mosquitto instance was created successfully
+        mosq = mosquitto_new(nullptr, true, nullptr);
         if (!mosq)
         {
             std::cerr << "Error: Unable to create Mosquitto instance." << std::endl;
-            std::exit(1);
+            exit(1); // Or handle the error as appropriate
         }
+
         // Set message callback function
 
         mosquitto_message_callback_set(mosq, message_callback);
@@ -107,9 +112,16 @@ public:
     }
 
     // Subscribe to a specific MQTT topic
-    void publish(const char *topic, const char *message)
+    static void publish(const char *topic, const std::string &message)
     {
-        mosquitto_publish(mosq, nullptr, topic, strlen(message), message, 1, false);
+        if (mosq)
+        {
+            mosquitto_publish(mosq, nullptr, topic, message.length(), message.c_str(), 1, false);
+        }
+        else
+        {
+            std::cerr << "Mosquitto instance is not initialized." << std::endl;
+        }
     }
 
     // Listen for MQTT messages for ever and ever and ever and ever and ever and ever and ever
@@ -136,22 +148,13 @@ public:
         }
     }
 
-    // Ask ACE for the player count
-    void askPlayers()
+    static MosquittoClient *getInstance()
     {
-        char buffer[128];
-        snprintf(buffer, sizeof(buffer), "{\"sender\":\"%s\",\"numPlayers\":\"null\",\"method\":\"get\"}", _cfg_name);
-        this->publish(serverTopic, buffer);
-    }
-
-    // Construct a JSON message following the Sherlocked guidelines
-    std::string makeMessage(std::string methodinfo, std::string function, std::string functionmessage)
-    {
-        std::string sender = _cfg_name;
-
-        std::string output = "{\"sender\":\"" + sender + "\",\"" + function + "\":\"" + functionmessage + "\",\"method\":\"" + methodinfo + "\"}";
-        std::cout << output << std::endl;
-        return output;
+        if (instance == nullptr)
+        {
+            instance = new MosquittoClient();
+        }
+        return instance;
     }
 
     // Lots of getters and setters, probbly not needed but here just in case!
@@ -163,8 +166,13 @@ public:
     static std::string getScanningComplete() { return scanningComplete; }
     static std::string getGameStart() { return gameStart; }
 
+    // Private copy constructor and assignment operator to prevent multiple instances
+    MosquittoClient(const MosquittoClient &) = delete;
+    MosquittoClient &operator=(const MosquittoClient &) = delete;
+
 private:
-    struct mosquitto *mosq;
+    static MosquittoClient *instance;
+    static struct mosquitto *mosq;
     static std::string numberPlayers;
     static std::string scanningComplete;
     static std::string gameStart;
@@ -182,6 +190,28 @@ private:
         return FileHandler::readFromFile(name);
     }
 
+    // Ask ACE for the player count
+    void askPlayers()
+    {
+        char buffer[128];
+        snprintf(buffer, sizeof(buffer), "{\"sender\":\"%s\",\"numPlayers\":\"null\",\"method\":\"get\"}", _cfg_name);
+        this->publish(serverTopic, buffer);
+    }
+
+    static std::string makeMessage(std::string sender, std::string method, int id, int value)
+    {
+        // Directly create the JSON object with id and value inside
+        json message = {
+            {"sender", sender},
+            {"method", method},
+            {"outputs", json::array({{{"id", id}, {"value", value}}})}};
+
+        // Convert the JSON object to a string
+        std::string output = message.dump(); // Use dump(4) for pretty printing with indent of 4 spaces
+        std::cout << "sending: " << output << std::endl;
+        return output;
+    }
+
     // Check if scanning (done externally) has been completed
     void checkScan()
     {
@@ -194,7 +224,8 @@ private:
         {
             std::cout << "SCANNING HASZ BEEN CXOMPLETED" << std::endl;
             // Tell ACE we are allll done here
-            makeMessage("info", SCANNINGKEY, "1");
+            std::string message = makeMessage(_cfg_name, "info", 1, DONE);
+            publish(serverTopic, message.c_str());
 
             // Reset all the states, ready for another round
             // gameStart = "0";
@@ -203,36 +234,85 @@ private:
             fileWriter("0", SCANNINGKEY);
             fileWriter("0", PLAYERSKEY);
             fileWriter("0", STARTKEY);
-
         }
     }
 
     // Process recieved messages
-    static void doStuff(json Data)
+    // static void doStuff(json Data)
+    // {
+    //     try
+    //     {
+    //         // Access jsonData and perform actions based on keys
+    //         if (Data.count(PLAYERSKEY) != 0)
+    //         {
+    //             // Key exists, extract the value
+    //             numberPlayers = Data[PLAYERSKEY];
+    //             std::cout << "Value for key numPlayers: " << numberPlayers << std::endl;
+    //             fileWriter(numberPlayers, PLAYERSKEY);
+    //         }
+    //         else if (Data.count(STARTKEY) != 0)
+    //         {
+    //             // Key exists, extract the value
+    //             gameStart = Data[STARTKEY];
+    //             std::cout << "Value for key gameStart: " << gameStart << std::endl;
+    //             fileWriter(gameStart, STARTKEY);
+    //         }
+    //         else
+    //         {
+    //             std::cout << "no known key found" << std::endl;
+    //         }
+    //     }
+
+    //     catch (const std::exception &e)
+    //     {
+    //         std::cerr << "Error parsing JSON: " << e.what() << std::endl;
+    //     }
+    // }
+
+    static void doStuff(const json &Data)
     {
         try
         {
-            // Access jsonData and perform actions based on keys
-            if (Data.count(PLAYERSKEY) != 0)
+            // Check if the message is from itself
+            if (Data.contains("sender") && Data["sender"] == _cfg_name)
+            {
+                std::cout << "Message from self, ignoring." << std::endl;
+                return; // Skip processing if the message is from itself
+            }
+            if (Data.contains("outputs") && Data["outputs"].is_array())
+            {
+                for (const auto &output : Data["outputs"])
+                {
+                    if (output.contains("id") && output.contains("value"))
+                    {
+                        int id = output["id"];
+                        int value = output["value"];
+
+                        // Check for specific id-value combinations
+                        if (id == 1 && value == 1) // For example, id=1 and value=1 means start game
+                        {
+                            std::cout << "Game start command received." << std::endl;
+                            // Example: set gameStart to true, write to file, etc.
+                            fileWriter("1", STARTKEY);
+                            std::string message = makeMessage(_cfg_name, "info", 1, PROCESSING);
+                            publish(serverTopic, message.c_str());
+                            gameStart = 1;
+                        }
+                    }
+                }
+            }
+            else if (Data.count(PLAYERSKEY) != 0)
             {
                 // Key exists, extract the value
                 numberPlayers = Data[PLAYERSKEY];
                 std::cout << "Value for key numPlayers: " << numberPlayers << std::endl;
                 fileWriter(numberPlayers, PLAYERSKEY);
             }
-            else if (Data.count(STARTKEY) != 0)
-            {
-                // Key exists, extract the value
-                gameStart = Data[STARTKEY];
-                std::cout << "Value for key gameStart: " << gameStart << std::endl;
-                fileWriter(gameStart, STARTKEY);
-            }
             else
             {
-                std::cout << "no known key found" << std::endl;
+                std::cout << "No 'outputs' key found or 'outputs' is not an array." << std::endl;
             }
         }
-
         catch (const std::exception &e)
         {
             std::cerr << "Error parsing JSON: " << e.what() << std::endl;
@@ -286,6 +366,9 @@ private:
 std::string MosquittoClient::numberPlayers = "0";
 std::string MosquittoClient::scanningComplete = "0";
 std::string MosquittoClient::gameStart = "0";
+
+MosquittoClient *MosquittoClient::instance = nullptr;
+struct mosquitto *MosquittoClient::mosq = nullptr;
 
 int main()
 {
