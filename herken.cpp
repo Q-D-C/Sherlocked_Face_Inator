@@ -1,3 +1,5 @@
+// g++ -o herken herken.cpp `pkg-config --cflags --libs opencv4` -std=c++14
+
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <fstream>
@@ -8,9 +10,9 @@
 #include <cstdlib>
 
 // Constants
-#define FRAMEWIDTH 320
-#define FRAMEHEIGHT 320
-#define EXPANSIONPIXELS 0
+#define FRAMEWIDTH 640
+#define FRAMEHEIGHT 640
+#define EXPANSIONPIXELS 50
 #define BLURRYNESSTHRESHHOLD 100
 
 #define YOLO8WEIGHTS "/home/nino/facemodels/res10_300x300_ssd_iter_140000_fp16.caffemodel"
@@ -74,7 +76,7 @@ public:
     }
 };
 
-// Abstract YOLO Model Interface
+// Abstract YOLO Model Interface this way you can change out yolo models without losing functionality
 class IYoloModel
 {
 public:
@@ -90,6 +92,7 @@ private:
     dnn::Net net;
 
 public:
+    // load the YOLO model
     void loadModel(const std::string &config, const std::string &weights) override
     {
         net = dnn::readNetFromDarknet(config, weights);
@@ -425,8 +428,22 @@ public:
 
     using WebcamHandler::WebcamHandler;
 
+    void enhanceImage(Mat &frame)
+    {
+        cv::Mat ycrcb;
+        cv::cvtColor(frame, ycrcb, COLOR_BGR2YCrCb);
+        vector<cv::Mat> channels;
+        cv::split(ycrcb, channels);
+        cv::equalizeHist(channels[0], channels[0]);
+        cv::merge(channels, ycrcb);
+        cv::cvtColor(ycrcb, frame, COLOR_YCrCb2BGR);
+    }
+
     void processFrame(Mat &frame) override
     {
+
+        enhanceImage(frame);
+
         if (readyToStart)
         {
             // Detect faces in the frame
@@ -444,11 +461,11 @@ public:
         logisch();
 
         // If desired, show the frame with detected faces in a window
-        if (showFrame)
-        {
+        // if (showFrame)
+        // {
             imshow("Detected Faces", frame);
             waitKey(1); // Wait for a key press for a short duration to update the window
-        }
+        // }
     }
 
     // Check if the correct amount of faces have been detected
