@@ -10,18 +10,18 @@
 #include <cstdlib>
 
 // Constants
-#define FRAMEWIDTH 640
+#define FRAMEWIDTH 1280
 #define FRAMEHEIGHT 640
 #define EXPANSIONPIXELS 50
 #define BLURRYNESSTHRESHHOLD 100
 
-#define YOLO8WEIGHTS "/home/nino/facemodels/res10_300x300_ssd_iter_140000_fp16.caffemodel"
-#define YOLO4WEIGHTS "/home/nino/face-detection-yolov4-tiny-master/yolo/yolov4-tiny-3l_best.weights"
-#define YOLO3WEIGHTS "/home/nino/facemodels/model-weights/yolov3-wider_16000.weights"
+//#define YOLO8WEIGHTS "/home/nino/facemodels/res10_300x300_ssd_iter_140000_fp16.caffemodel"
+#define YOLO4WEIGHTS "/home/pi/Desktop/Sherlocked_Face_Inator/models/yolov4-tiny-3l_best.weights"
+//#define YOLO3WEIGHTS "/home/nino/facemodels/model-weights/yolov3-wider_16000.weights"
 
-#define YOLO8CONFIG "/home/nino/facemodels/yolov8n-face.onnx"
-#define YOLO4CONFIG "/home/nino/face-detection-yolov4-tiny-master/yolo/yolov4-tiny-3l.cfg"
-#define YOLO3CONFIG "/home/nino/facemodels/cfg/yolov3-face.cfg"
+//#define YOLO8CONFIG "/home/nino/facemodels/yolov8n-face.onnx"
+#define YOLO4CONFIG "/home/pi/Desktop/Sherlocked_Face_Inator/models/yolov4-tiny-3l.cfg"
+//#define YOLO3CONFIG "/home/nino/facemodels/cfg/yolov3-face.cfg"
 
 // keys for what the files are called
 #define SCANNINGKEY "scanningComplete"
@@ -383,6 +383,10 @@ public:
     explicit WebcamHandler(int camIndex, std::unique_ptr<IYoloModel> model)
         : cap(camIndex, CAP_V4L), model(std::move(model))
     {
+        cap.set(cv::CAP_PROP_EXPOSURE, -1); // Auto exposure
+cap.set(cv::CAP_PROP_BRIGHTNESS, 128); // Adjust as necessary
+cap.set(cv::CAP_PROP_CONTRAST, 128); // Adjust as necessary
+
         if (!cap.isOpened())
         {
             cerr << "Error: Unable to open the webcam." << endl;
@@ -442,7 +446,7 @@ public:
     void processFrame(Mat &frame) override
     {
 
-        enhanceImage(frame);
+        //enhanceImage(frame);
 
         if (readyToStart)
         {
@@ -637,7 +641,7 @@ int main()
         yoloModel->loadModel(YOLO4CONFIG, YOLO4WEIGHTS);
 
         // Start webcam and face recognition
-        FaceRecognitionHandler handler(0, std::move(yoloModel)); // Use camera index 0
+        FaceRecognitionHandler handler(-1, std::move(yoloModel)); // Use camera index 0
         handler.captureAndProcess();
     }
     catch (const std::exception &e)
