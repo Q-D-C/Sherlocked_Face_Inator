@@ -1,8 +1,11 @@
+//g++ -std=c++14 mqttless.cpp -o mqttless
+
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <chrono>
 #include <thread>
+#include <string>
 
 class SimpleGameStateManager
 {
@@ -94,14 +97,18 @@ public:
 
             std::this_thread::sleep_for(std::chrono::seconds(1));
 
+std::cout << "brrrr" << std::endl;
+
             while (input != "0")
             {
 
                 // Periodically check if scanning is complete
+                std::string test = readFromFile("scanningComplete.txt");
+                std::cout << test << std::endl;
                 if (readFromFile("scanningComplete.txt") == "1")
                 {
                     // Reset game state
-                    std::cout << "Scanning complete. Resetting game state..." << std::endl;
+                    std::cout << "Generating complete. Resetting game state..." << std::endl;
                     resetGame();
                     input = "0";
                 }
@@ -118,6 +125,7 @@ private:
         writeToFile("0", "numPlayers.txt");
         writeToFile("0", "scanningComplete.txt");
         writeToFile("0", "gameStart.txt");
+        writeToFile("0", "done.txt");
     }
 
     void writeToFile(const std::string &value, const std::string &fileName)

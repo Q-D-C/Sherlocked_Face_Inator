@@ -1,3 +1,10 @@
+// gcc -std=c++14 -g mqtt.cpp -o mqtt -lstdc++ -lmosquitto
+
+// mosquitto_pub -h localhost -t test/testing -m "on" -q 1
+// mosquitto_sub -h localhost -t test/testing -q 1
+// https://cedalo.com/blog/mqtt-subscribe-publish-mosquitto-pub-sub-example/
+// mosquitto_pub -h localhost -t alch/FaceInator -m "{\"sender\":\"server\",\"startScanning\":\"1\",\"method\":\"put\"}" -q 1
+
 #include <iostream>
 #include <mosquitto.h>
 #include <fstream>
@@ -146,7 +153,7 @@ public:
                 std::cout << "Parsed JSON: " << receivedData.dump(4) << std::endl;
                 if (instance)
                 {
-                    instance->doStuff(receivedData);
+                    instance->handleMessage(receivedData);
                 }
             }
             catch (const std::exception &e)
@@ -160,7 +167,7 @@ public:
         }
     }
 
-    void doStuff(const json &data)
+    void handleMessage(const json &data)
     {
         try
         {
