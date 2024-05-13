@@ -256,9 +256,12 @@ public:
 
     void askPlayers()
     {
-        char buffer[128];
-        snprintf(buffer, sizeof(buffer), "{\"sender\":\"%s\",\"numPlayers\":\"null\",\"method\":\"get\"}", _cfg_name);
-        MosquittoClient::publish(serverTopic, buffer);
+        json message = {
+            {"sender", _cfg_name},
+            {"numPlayers", nullptr}, // Using nullptr to denote null in JSON
+            {"method", "get"}};
+        std::string messageStr = message.dump();                   // Serialize JSON object to string
+        MosquittoClient::publish(serverTopic, messageStr.c_str()); // Publish the JSON string
     }
 
     void checkScan()
