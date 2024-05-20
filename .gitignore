@@ -4,6 +4,9 @@
 # Unignore all with extensions
 !*.*
 
+# Unignore models folder
+!models
+
 # Prerequisites
 *.d
 

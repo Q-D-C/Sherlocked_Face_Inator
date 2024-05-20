@@ -15,13 +15,13 @@
 #define EXPANSIONPIXELS 50
 #define BLURRYNESSTHRESHHOLD 100
 
-// #define YOLO8WEIGHTS "/home/nino/facemodels/res10_300x300_ssd_iter_140000_fp16.caffemodel"
-#define YOLO4WEIGHTS "/home/pi/Desktop/Sherlocked_Face_Inator/models/yolov4-tiny-3l_best.weights"
-// #define YOLO3WEIGHTS "/home/nino/facemodels/model-weights/yolov3-wider_16000.weights"
+// #define YOLO8WEIGHTS "models/yolo8_weights.caffemodel"
+#define YOLO4WEIGHTS "models/yolov4-tiny-3l_best.weights"
+// #define YOLO3WEIGHTS "models/yolov3-wider_16000.weights"
 
-// #define YOLO8CONFIG "/home/nino/facemodels/yolov8n-face.onnx"
-#define YOLO4CONFIG "/home/pi/Desktop/Sherlocked_Face_Inator/models/yolov4-tiny-3l.cfg"
-// #define YOLO3CONFIG "/home/nino/facemodels/cfg/yolov3-face.cfg"
+// #define YOLO8CONFIG "models/yolov8n-face.onnx"
+#define YOLO4CONFIG "models/yolov4-tiny-3l.cfg"
+// #define YOLO3CONFIG "models/yolov3-face.cfg"
 
 // keys for what the files are called
 #define SCANNINGKEY "scanningComplete"
@@ -404,13 +404,6 @@ public:
                 break;
 
             processFrame(frame);
-
-            // if (showFrame)
-            // {
-            //     imshow("Frame", frame);
-            //     if (waitKey(1) == 27)
-            //         break; // ESC to quit
-            // }
         }
     }
 
@@ -453,28 +446,31 @@ public:
             // Detect faces in the frame
             auto faces = model->detectFaces(frame);
 
-            // Iterate over all detected faces and draw rectangles around them
-            for (const auto &face : faces)
+            // Iterate over all detected faces and draw rectangles around them, if wanted
+            if (showFrame)
             {
-                rectangle(frame, face, Scalar(0, 255, 0), 2); // Green rectangle with thickness of 2
+                for (const auto &face : faces)
+                {
+                    rectangle(frame, face, Scalar(0, 0, 0), 0); // Green rectangle with thickness of 2
+                }
             }
-
             CheckAndSafeFaces(faces, frame);
         }
 
         logisch();
 
         // If desired, show the frame with detected faces in a window
-        // if (showFrame)
-        // {
-        imshow("Detected Faces", frame);
-        waitKey(1); // Wait for a key press for a short duration to update the window
-        // }
+        if (showFrame)
+        {
+            imshow("Detected Faces", frame);
+            waitKey(1); // Wait for a key press for a short duration to update the window
+        }
     }
 
     // Check if the correct amount of faces have been detected
     void CheckAndSafeFaces(vector<cv::Rect> boxes, const cv::Mat &frame)
     {
+        std::cout << "Number of faces found: " << boxes.size() << std::endl;
         if (boxes.size() >= numberPlayers && !facesCaptured)
         {
             std::cout << "Number of faces found: " << boxes.size() << std::endl;

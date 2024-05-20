@@ -3,7 +3,9 @@
 // mosquitto_pub -h localhost -t test/testing -m "on" -q 1
 // mosquitto_sub -h localhost -t test/testing -q 1
 // https://cedalo.com/blog/mqtt-subscribe-publish-mosquitto-pub-sub-example/
-// mosquitto_pub -h localhost -t alch/FaceInator -m "{\"sender\":\"server\",\"startScanning\":\"1\",\"method\":\"put\"}" -q 1
+// mosquitto_pub -h localhost -t alch/FaceInator -m "{\"sender\":\"server\",\"numPlayers\":\"3\",\"method\":\"put\"}" -q 1
+// mosquitto_pub -h localhost -t alch/FaceInator -m "{\"sender\":\"server\", \"method\":\"put\", \"outputs\":[{\"id\":1, \"value\":1}]}" -q 1
+
 
 #include <iostream>
 #include <mosquitto.h>
