@@ -1,9 +1,13 @@
 import replicate
 import time
 
-base_prompt = "sketch of {description} img. dark, dramatic, low detail, dressed in alchemist clothes, looking serious"
+base_prompt_epic = "sketch of {description} img. dark, dramatic, low detail, dressed in alchemist clothes, looking serious"
+base_prompt_sketch = "a quick, rough sketch of a {description} dressed in alchemist clothes, unrefined, with pencil strokes"
+selfContained = True
 
 # Function to check if the person in the image wears glasses
+
+
 def hasGlasses(path):
     with open(path, "rb") as image_file:
         output = replicate.run(
@@ -20,6 +24,8 @@ def hasGlasses(path):
     return output
 
 # Function to identify the type of person in the image
+
+
 def whatPerson(path):
     with open(path, "rb") as image_file:
         output = replicate.run(
@@ -50,7 +56,7 @@ def check_person(path):
 # Function to generate an image based on a prompt
 
 
-def generate(input_prompt, path, style):
+def generate_epic(input_prompt, path, style):
     with open(path, "rb") as input_image_file:
         output = replicate.run(
             "tencentarc/photomaker-style:467d062309da518648ba89d226490e02b8ed09b5abc15026e54e31c5a8cd0769",
@@ -66,23 +72,54 @@ def generate(input_prompt, path, style):
             }
         )
     print(output)
-    
+
+
+def generate_sketch(input_prompt, path):
+    with open(path, "rb") as input_image_file:
+        output = replicate.run(
+            "zsxkib/instant-id:491ddf5be6b827f8931f088ef10c6d015f6d99685e6454e6f04c8ac298979686",
+            input={
+                "image": input_image_file,
+                "prompt": "input_prompt",
+                "sdxl_weights": "dreamshaper-xl",
+                "guidance_scale": 2.5,
+                "ip_adapter_scale": 0.8,
+                "num_inference_steps": 15,
+                "controlnet_conditioning_scale": 0.8,
+                "output_format": "png",
+                "num_outputs": 1,
+                "negative_prompt": "text, nsfw, realistic"
+            }
+        )
+    print(output)
+
+
 def generate_images():
     # Read the number of players from numplayers.txt
     with open("numPlayers.txt", "r") as numplayers_file:
         num_players = int(numplayers_file.read())
+        print("amount of pictures to generate: ", num_players)
+        
 
     # Loop through each face image
     for i in range(1, num_players + 1):
-        image_path = f"/home/nino/Sherlocked_Face_Inator/FACES/face{i}.png"
-        # found_description = check_person(image_path)
-        # full_prompt = base_prompt.format(description=found_description)
-        # generate(full_prompt, image_path, "Comic book")
+        image_path = f"FACES/face{i}.png"
+        found_description = check_person(image_path)
+        full_prompt_epic = base_prompt_epic.format(description=found_description)
+        print("epic prompt", i, " is ", full_prompt_epic)
+        generate_epic(full_prompt_epic, image_path, "Comic book")
+        full_prompt_sketch = base_prompt_sketch.format(description=found_description)
+        print("sketch prompt", i, " is ", full_prompt_sketch)
+        generate_sketch(full_prompt_sketch, image_path)
         print(image_path)
 
     # Write to done.txt to indicate completion
     with open("done.txt", "w") as done_file:
         done_file.write("1")
+        if selfContained:
+            with open("scanningComplete.txt", "w") as scanning_complete_file:
+                scanning_complete_file.write("0")
+            
 
 
 # Main execution block
