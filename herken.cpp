@@ -383,9 +383,9 @@ public:
     explicit WebcamHandler(int camIndex, std::unique_ptr<IYoloModel> model)
         : cap(camIndex, CAP_V4L), model(std::move(model))
     {
-        cap.set(cv::CAP_PROP_EXPOSURE, -1);    // Auto exposure
-        cap.set(cv::CAP_PROP_BRIGHTNESS, 128); // Adjust as necessary
-        cap.set(cv::CAP_PROP_CONTRAST, 128);   // Adjust as necessary
+        //cap.set(cv::CAP_PROP_EXPOSURE, -1);    // Auto exposure
+        cap.set(cv::CAP_PROP_BRIGHTNESS, 208); // Adjust as necessary
+        //cap.set(cv::CAP_PROP_CONTRAST, 128);   // Adjust as necessary
 
         if (!cap.isOpened())
         {
@@ -425,21 +425,8 @@ public:
 
     using WebcamHandler::WebcamHandler;
 
-    void enhanceImage(Mat &frame)
-    {
-        cv::Mat ycrcb;
-        cv::cvtColor(frame, ycrcb, COLOR_BGR2YCrCb);
-        vector<cv::Mat> channels;
-        cv::split(ycrcb, channels);
-        cv::equalizeHist(channels[0], channels[0]);
-        cv::merge(channels, ycrcb);
-        cv::cvtColor(ycrcb, frame, COLOR_YCrCb2BGR);
-    }
-
     void processFrame(Mat &frame) override
     {
-
-        // enhanceImage(frame);
 
         if (readyToStart)
         {
@@ -451,7 +438,7 @@ public:
             {
                 for (const auto &face : faces)
                 {
-                    rectangle(frame, face, Scalar(0, 0, 0), 0); // Green rectangle with thickness of 2
+                    rectangle(frame, face, Scalar(0, 0, 255), 2); // Red rectangle with thickness of 2
                 }
             }
             CheckAndSafeFaces(faces, frame);
@@ -500,13 +487,12 @@ public:
                 filename << "face_" << i << ".jpg";
 
                 // Save the cropped face to a file
-                cv::imwrite(filename.str(), croppedFace);
+                cv::imwrite(filename.str(), croppedFace, {IMWRITE_JPEG_QUALITY, 95});
             }
             facesCaptured = true;
         };
     }
 
-    // Function to check the bluriness of a face
     double checkBluriness(const cv::Mat &image)
     {
         // Convert the image to grayscale
@@ -615,8 +601,8 @@ public:
             {
                 // If the faces where captured correctly, tell the system that it has been completed and reset the an idle state
                 FileHandler::writeToFile("1", SCANNINGKEY);
-                FileHandler::writeToFile("0", PLAYERSKEY);
-                FileHandler::writeToFile("0", STARTKEY);
+                // FileHandler::writeToFile("0", PLAYERSKEY);
+                // FileHandler::writeToFile("0", STARTKEY);
 
                 facesCaptured = false;
                 numberPlayers = 0;
