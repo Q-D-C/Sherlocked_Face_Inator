@@ -15,10 +15,11 @@ cd Sherlocked_Face_Inator
 
 ## Install Dependencies for MQTT
 
-Install the Mosquitto development libraries:
+Install the Mosquitto and json development libraries:
 
 ```sh
 sudo apt install libmosquitto-dev -y
+sudo apt install nlohmann-json3-dev -y
 ```
 
 ## Compile `mqtt.cpp`
