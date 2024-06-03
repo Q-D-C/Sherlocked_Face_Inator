@@ -2,7 +2,7 @@
 
 // mosquitto_sub -v -t '#'
 // https://cedalo.com/blog/mqtt-subscribe-publish-mosquitto-pub-sub-example/
-// mosquitto_pub -h localhost -t alch/FaceInator -m "{\"sender\":\"server\",\"numPlayers\":\"3\",\"method\":\"put\"}" -q 1
+// mosquitto_pub -h localhost -t alch/FaceInator -m "{\"sender\":\"server\",\"numPlayers\":\"1\",\"method\":\"put\"}" -q 1
 // mosquitto_pub -h localhost -t alch/FaceInator -m "{\"sender\":\"server\", \"method\":\"put\", \"outputs\":[{\"id\":1, \"value\":1}]}" -q 1
 
 
@@ -64,7 +64,6 @@ public:
         return value;
     }
 };
-
 class MosquittoClient
 {
 public:
@@ -225,6 +224,15 @@ public:
         }
         return instance;
     }
+
+    void resetInternalValues()
+    {
+        numberPlayers = "0";
+        scanningComplete = "0";
+        gameStart = "0";
+        PlayersHasBeenAsked = false;
+        ScanningHasBeenInformed = false;
+    }
 };
 
 MosquittoClient *MosquittoClient::instance = nullptr;
@@ -236,8 +244,6 @@ class GameLogic
 {
 public:
     MosquittoClient *mosqClient;
-    bool PlayersHasBeenAsked = false;
-    bool ScanningHasBeenInformed = false;
 
     GameLogic(MosquittoClient *client) : mosqClient(client) {}
 
@@ -245,11 +251,12 @@ public:
     {
         while (true)
         {
-            if (mosqClient->getGameStart() != "0" && mosqClient->getNumberPlayers() == "0" && !PlayersHasBeenAsked)
+            // Only ask players if the game has started and we haven't asked for players yet
+            if (mosqClient->getGameStart() == "1" && !mosqClient->PlayersHasBeenAsked)
             {
                 askPlayers();
-                std::cout << "Players has been asked" << std::endl;
-                PlayersHasBeenAsked = true;
+                std::cout << "Players have been asked" << std::endl;
+                mosqClient->PlayersHasBeenAsked = true;
             }
             checkScan();
             checkDone();
@@ -269,11 +276,12 @@ public:
     void checkScan()
     {
         std::string value = FileHandler::readFromFile(SCANNINGKEY);
-        if (value == "1" && !ScanningHasBeenInformed)
+        if (value == "1" && !mosqClient->ScanningHasBeenInformed)
         {
+            std::cout << "scanningcomplete.txt = 1" << std::endl;
             std::string message = MosquittoClient::makeMessage(_cfg_name, "info", 1, DONE);
             MosquittoClient::publish(serverTopic, message);
-            ScanningHasBeenInformed = true;
+            mosqClient->ScanningHasBeenInformed = true;
         }
     }
 
@@ -282,6 +290,7 @@ public:
         std::string value = FileHandler::readFromFile(DONEKEY);
         if (value == "1")
         {
+            std::cout << "done.txt = 1" << std::endl;
             std::string message = MosquittoClient::makeMessage(_cfg_name, "info", 1, IDLE);
             MosquittoClient::publish(serverTopic, message);
             resetStates();
@@ -290,8 +299,7 @@ public:
 
     void resetStates()
     {
-        PlayersHasBeenAsked = false;
-        ScanningHasBeenInformed = false;
+        mosqClient->resetInternalValues();
         FileHandler::writeToFile("0", SCANNINGKEY);
         FileHandler::writeToFile("0", PLAYERSKEY);
         FileHandler::writeToFile("0", STARTKEY);

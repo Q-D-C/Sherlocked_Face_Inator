@@ -8,7 +8,7 @@ from replicate.exceptions import ModelError
 base_prompt_epic = "sketch of {description} img. dark, dramatic, low detail, dressed in alchemist clothes, looking serious"
 base_prompt_sketch = "a rough sketch of a {description} img, alchemist clothes, dressed as an alchemist, unrefined, with pencil strokes, solid background, magical setting, two colors"
 
-selfContained = True
+selfContained = False
 MAX_RETRIES = 5
 
 # Function to check if the person in the image wears glasses
@@ -41,7 +41,7 @@ def whatPerson(path):
                 "use_nucleus_sampling": False
             }
         )
-    return output# Function to identify the type of person in the image
+    return output
 
 def whatHair(path):
     with open(path, "rb") as image_file:
@@ -83,13 +83,12 @@ def check_person(path):
     if 'glasses' not in person.lower() and glasses == "yes":
         # Append 'with glasses' if the description does not include it
         person += " with glasses"
-    person += "with"
+    person += " with "
     person += hair
-    person += "and"
+    person += " and "
     person += eye
-    person += "eyes"
+    person += " eyes"
     
-
     return person
 
 # Function to save an image from a URL to a local path
@@ -179,23 +178,24 @@ def generate_images(overlay_path):
     os.makedirs(output_dir_sketch, exist_ok=True)
     
     # Loop through each face image
-    for i in range(1, num_players):
+    for i in range(1, num_players + 1):
         image_path = f"face_{i}.jpg"
         print(image_path)
         found_description = check_person(image_path)
         full_prompt_epic = base_prompt_epic.format(description=found_description)
         print("epic prompt", i, " is ", full_prompt_epic)
-        generate_image_with_retries(generate_epic, full_prompt_epic, image_path, "Cinematic", output_dir_epic, overlay_path, image_index=i)
+        #generate_image_with_retries(generate_epic, full_prompt_epic, image_path, "Cinematic", output_dir_epic, overlay_path, image_index=i)
         #full_prompt_sketch = base_prompt_sketch.format(description=found_description)
         #print("sketch prompt", i, " is ", full_prompt_sketch)
         #generate_image_with_retries(generate_sketch, full_prompt_sketch, image_path, output_dir_sketch, image_index=i)
         
-
     # Write to done.txt to indicate completion
     with open("done.txt", "w") as done_file:
+        print("updating done.txt")
         done_file.write("1")
         if selfContained:
             with open("scanningComplete.txt", "w") as scanning_complete_file:
+                print("updating scanningcomplete.txt")
                 scanning_complete_file.write("0")
 
 # Main execution block

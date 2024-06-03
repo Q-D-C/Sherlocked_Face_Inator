@@ -8,12 +8,13 @@
 #include <string>
 #include <algorithm>
 #include <cstdlib>
+#include <unistd.h>
 
 // Constants
 #define FRAMEWIDTH 1280
 #define FRAMEHEIGHT 640
 #define EXPANSIONPIXELS 50
-#define BLURRYNESSTHRESHHOLD 100
+#define BLURRYNESSTHRESHHOLD 400
 
 // #define YOLO8WEIGHTS "models/yolo8_weights.caffemodel"
 #define YOLO4WEIGHTS "models/yolov4-tiny-3l_best.weights"
@@ -27,9 +28,10 @@
 #define SCANNINGKEY "scanningComplete"
 #define STARTKEY "gameStart"
 #define PLAYERSKEY "numPlayers"
+#define DONEKEY "done"
 
 // Display the webcam output or not
-bool showFrame = true;
+bool showFrame = false;
 
 using namespace cv;
 using namespace std;
@@ -103,7 +105,7 @@ public:
     std::vector<cv::Rect> detectFaces(const cv::Mat &frame) override
     {
 
-        float confidenceThreshold = 0.5;
+        float confidenceThreshold = 0.9;
         float nmsThreshold = 0.4;
 
         // Prepare the frame for YOLO model
@@ -383,9 +385,9 @@ public:
     explicit WebcamHandler(int camIndex, std::unique_ptr<IYoloModel> model)
         : cap(camIndex, CAP_V4L), model(std::move(model))
     {
-        //cap.set(cv::CAP_PROP_EXPOSURE, -1);    // Auto exposure
+        // cap.set(cv::CAP_PROP_EXPOSURE, -1);    // Auto exposure
         cap.set(cv::CAP_PROP_BRIGHTNESS, 208); // Adjust as necessary
-        //cap.set(cv::CAP_PROP_CONTRAST, 128);   // Adjust as necessary
+        // cap.set(cv::CAP_PROP_CONTRAST, 128);   // Adjust as necessary
 
         if (!cap.isOpened())
         {
@@ -483,8 +485,8 @@ public:
                 // Generate a unique filename
                 stringstream filename;
                 // UNCOMMENT IF YOU WANT TO PUT IN FOLDER INSTEAD
-                // filename << OUTPUTIMAGESLOCATION << "/face_" << i << ".jpg";
-                filename << "face_" << i << ".jpg";
+                // filename << OUTPUTIMAGESLOCATION << "/face_" << i+1 << ".jpg";
+                filename << "face_" << i + 1 << ".jpg";
 
                 // Save the cropped face to a file
                 cv::imwrite(filename.str(), croppedFace, {IMWRITE_JPEG_QUALITY, 95});
@@ -568,17 +570,16 @@ public:
         if (facesCaptured)
         {
             // When there are the correct amount of faces detected check if they are usable
-
             bool isAFaceBlurry = false;
 
             for (int i = 0; i < numberPlayers; i++)
             {
                 std::string filename;
                 float blurrness;
-                filename = "face_" + std::to_string(i) + ".jpg";
+                filename = "face_" + std::to_string(i + 1) + ".jpg";
                 cv::Mat face = cv::imread(filename);
                 blurrness = checkBluriness(face);
-                std::cout << "blurryness of face nr " << i << " is " << blurrness << std::endl;
+                std::cout << "blurryness of face number " << i << " is " << blurrness << std::endl;
                 if (blurrness <= BLURRYNESSTHRESHHOLD)
                 {
                     // If one face is too blurry stop checking the rest.
@@ -592,23 +593,41 @@ public:
                 for (int i = 0; i < numberPlayers; i++)
                 {
                     std::string filename;
-                    filename = "face_" + std::to_string(i) + ".jpg";
+                    filename = "face_" + std::to_string(i + 1) + ".jpg";
                     std::remove(filename.c_str());
                 } // Reset the variable to retry capturing all faces
                 facesCaptured = false;
             }
             else
             {
-                // If the faces where captured correctly, tell the system that it has been completed and reset the an idle state
+                // If the faces were captured correctly, tell the system that it has been completed and reset to an idle state
+                std::cout << "Scanning complete, writing to file..." << std::endl;
                 FileHandler::writeToFile("1", SCANNINGKEY);
-                // FileHandler::writeToFile("0", PLAYERSKEY);
-                // FileHandler::writeToFile("0", STARTKEY);
 
+                // Wait for done.txt to be updated to 1
+                bool done = false;
+                while (!done)
+                {
+                    std::string temp = FileHandler::readFromFile(DONEKEY);
+                    // Trim leading and trailing whitespace
+                    temp.erase(std::remove_if(temp.begin(), temp.end(), ::isspace), temp.end());
+                    // int donefile = std::stoi(temp);
+                    if (temp == "1")
+                    {
+                        done = true;
+                    }
+                    else
+                    {
+                        // std::cout << "Waiting for done.txt to be updated..." << std::endl;
+                        // sleep(1); // Wait for 5 seconds before checking again
+                    }
+                }
+
+                std::cout << "Resetting self" << std::endl;
                 facesCaptured = false;
                 numberPlayers = 0;
                 gameStart = 0;
                 readyToStart = false;
-                // TO:DO, Do creepy AI stuff
             }
         }
     }
