@@ -41,15 +41,54 @@ def whatPerson(path):
                 "use_nucleus_sampling": False
             }
         )
+    return output# Function to identify the type of person in the image
+
+def whatHair(path):
+    with open(path, "rb") as image_file:
+        output = replicate.run(
+            "andreasjansson/blip-2:f677695e5e89f8b236e52ecd1d3f01beb44c34606419bcc19345e046d8f786f9",
+            input={
+                "image": image_file,
+                "caption": False,
+                "context": "there is one person",
+                "question": "what is this persons hair color and length",
+                "temperature": 1,
+                "use_nucleus_sampling": False
+            }
+        )
     return output
 
-# Function to check and update the person description based on glasses information
+def whatEye(path):
+    with open(path, "rb") as image_file:
+        output = replicate.run(
+            "andreasjansson/blip-2:f677695e5e89f8b236e52ecd1d3f01beb44c34606419bcc19345e046d8f786f9",
+            input={
+                "image": image_file,
+                "caption": False,
+                "context": "there is one person",
+                "question": "What is this persons eye color",
+                "temperature": 1,
+                "use_nucleus_sampling": False
+            }
+        )
+    return output
+
+# Function to check and update the person description based on information
 def check_person(path):
     glasses = hasGlasses(path)  # Check if the person in the image has glasses
     person = whatPerson(path)  # Get the description of the person
+    hair = whatHair(path)
+    eye = whatEye(path)
+    
     if 'glasses' not in person.lower() and glasses == "yes":
         # Append 'with glasses' if the description does not include it
         person += " with glasses"
+    person += "with"
+    person += hair
+    person += "and"
+    person += eye
+    person += "eyes"
+    
 
     return person
 
@@ -92,7 +131,7 @@ def generate_epic(input_prompt, path, style, output_dir, overlay_path=None, imag
                 "input_image": input_image_file,
                 "num_outputs": 1,
                 "guidance_scale": 5,
-                "negative_prompt": "realistic, photo-realistic, worst quality, greyscale, bad anatomy, bad hands, error, text",
+                "negative_prompt": "realistic, photo-realistic, worst quality, greyscale, bad anatomy, bad hands, error, text, hat, wizard hat",
                 "style_strength_ratio": 35
             }
         )
@@ -141,15 +180,15 @@ def generate_images(overlay_path):
     
     # Loop through each face image
     for i in range(1, num_players + 1):
-        image_path = f"FACES/face_{i}.jpg"
+        image_path = f"VIP5/face_{i}.jpg"
         print(image_path)
         found_description = check_person(image_path)
         full_prompt_epic = base_prompt_epic.format(description=found_description)
         print("epic prompt", i, " is ", full_prompt_epic)
-        #generate_image_with_retries(generate_epic, full_prompt_epic, image_path, "Comic book", output_dir_epic, overlay_path, image_index=i)
-        full_prompt_sketch = base_prompt_sketch.format(description=found_description)
-        print("sketch prompt", i, " is ", full_prompt_sketch)
-        generate_image_with_retries(generate_sketch, full_prompt_sketch, image_path, output_dir_sketch, image_index=i)
+        generate_image_with_retries(generate_epic, full_prompt_epic, image_path, "Cinematic", output_dir_epic, overlay_path, image_index=i)
+        #full_prompt_sketch = base_prompt_sketch.format(description=found_description)
+        #print("sketch prompt", i, " is ", full_prompt_sketch)
+        #generate_image_with_retries(generate_sketch, full_prompt_sketch, image_path, output_dir_sketch, image_index=i)
         
 
     # Write to done.txt to indicate completion
