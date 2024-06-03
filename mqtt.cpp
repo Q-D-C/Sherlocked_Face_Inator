@@ -1,7 +1,6 @@
 // gcc -std=c++14 -g mqtt.cpp -o mqtt -lstdc++ -lmosquitto
 
-// mosquitto_pub -h localhost -t test/testing -m "on" -q 1
-// mosquitto_sub -h localhost -t test/testing -q 1
+// mosquitto_sub -v -t '#'
 // https://cedalo.com/blog/mqtt-subscribe-publish-mosquitto-pub-sub-example/
 // mosquitto_pub -h localhost -t alch/FaceInator -m "{\"sender\":\"server\",\"numPlayers\":\"3\",\"method\":\"put\"}" -q 1
 // mosquitto_pub -h localhost -t alch/FaceInator -m "{\"sender\":\"server\", \"method\":\"put\", \"outputs\":[{\"id\":1, \"value\":1}]}" -q 1
@@ -249,6 +248,7 @@ public:
             if (mosqClient->getGameStart() != "0" && mosqClient->getNumberPlayers() == "0" && !PlayersHasBeenAsked)
             {
                 askPlayers();
+                std::cout << "Players has been asked" << std::endl;
                 PlayersHasBeenAsked = true;
             }
             checkScan();

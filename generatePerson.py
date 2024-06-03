@@ -179,8 +179,8 @@ def generate_images(overlay_path):
     os.makedirs(output_dir_sketch, exist_ok=True)
     
     # Loop through each face image
-    for i in range(1, num_players + 1):
-        image_path = f"VIP5/face_{i}.jpg"
+    for i in range(1, num_players):
+        image_path = f"face_{i}.jpg"
         print(image_path)
         found_description = check_person(image_path)
         full_prompt_epic = base_prompt_epic.format(description=found_description)
