@@ -1,15 +1,49 @@
-import replicate
-import time
 import os
+import time
 import requests
+import replicate
 from PIL import Image
-from replicate.exceptions import ModelError
+from datetime import datetime
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
 base_prompt_epic = "sketch of {description} img. dark, dramatic, low detail, dressed in alchemist clothes, looking serious"
 base_prompt_sketch = "a rough sketch of a {description} img, alchemist clothes, dressed as an alchemist, unrefined, with pencil strokes, solid background, magical setting, two colors"
 
-selfContained = False
+selfContained = True
 MAX_RETRIES = 5
+
+# Google Drive API setup
+SCOPES = ['https://www.googleapis.com/auth/drive']
+SERVICE_ACCOUNT_FILE = '/home/nino/Documents/GitHub/Sherlocked_Face_Inator/faceinator-d0b24a24cd26.json'
+
+# Replace this with the ID of your parent folder
+PARENT_FOLDER_ID = '13WgsLekW8sWBAoqe0COGAdVYEBi_D5IS'
+YOUR_EMAIL = 'ai.faceinator@gmail.com'  # Replace with your email
+
+credentials = service_account.Credentials.from_service_account_file(
+    SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+drive_service = build('drive', 'v3', credentials=credentials)
+
+def create_folder(name, parent_id=None):
+    file_metadata = {
+        'name': name,
+        'mimeType': 'application/vnd.google-apps.folder'
+    }
+    if parent_id:
+        file_metadata['parents'] = [parent_id]
+    folder = drive_service.files().create(body=file_metadata, fields='id').execute()
+    return folder.get('id')
+
+def upload_file(file_path, folder_id):
+    file_metadata = {
+        'name': os.path.basename(file_path),
+        'parents': [folder_id]
+    }
+    media = MediaFileUpload(file_path, mimetype='image/png')
+    file = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+    return file.get('id')
 
 # Function to check if the person in the image wears glasses
 def hasGlasses(path):
@@ -77,17 +111,10 @@ def whatEye(path):
 def check_person(path):
     glasses = hasGlasses(path)  # Check if the person in the image has glasses
     person = whatPerson(path)  # Get the description of the person
-    hair = whatHair(path)
-    eye = whatEye(path)
     
     if 'glasses' not in person.lower() and glasses == "yes":
         # Append 'with glasses' if the description does not include it
         person += " with glasses"
-    person += " with "
-    person += hair
-    person += " and "
-    person += eye
-    person += " eyes"
     
     return person
 
@@ -100,7 +127,7 @@ def save_image(url, path):
 # Function to overlay one image on top of another
 def overlay_image(background_path, overlay_path, output_path, position=(0, 0)):
     background = Image.open(background_path)
-    overlay = Image.open(overlay_path)
+    overlay = Image.open(overlay_path).convert("RGBA")
     background.paste(overlay, position, overlay)
     background.save(output_path)
 
@@ -109,14 +136,15 @@ def generate_image_with_retries(generate_function, *args, **kwargs):
     retries = 0
     while retries < MAX_RETRIES:
         try:
-            generate_function(*args, **kwargs)
-            break
-        except ModelError as e:
+            result = generate_function(*args, **kwargs)
+            return result  # Return the result from the generate function
+        except replicate.exceptions.ModelError as e:
             print(f"Error: {e}. Retrying... ({retries + 1}/{MAX_RETRIES})")
             retries += 1
             time.sleep(2)
     else:
         print("Failed to generate image after several retries.")
+        return None, None  # Ensure it returns two None values to be unpacked
 
 # Function to generate an image based on a prompt
 def generate_epic(input_prompt, path, style, output_dir, overlay_path=None, image_index=0):
@@ -136,13 +164,15 @@ def generate_epic(input_prompt, path, style, output_dir, overlay_path=None, imag
         )
     if output is None:
         print(f"Error: No output received for prompt: {input_prompt}")
-        return
+        return None, None
     for idx, image_url in enumerate(output):
         epic_image_path = os.path.join(output_dir, f"epic_{image_index}.png")
         save_image(image_url, epic_image_path)
         if overlay_path:
             overlay_output_path = os.path.join(output_dir, f"epic_framed_{image_index}.png")
             overlay_image(epic_image_path, overlay_path, overlay_output_path)
+            return epic_image_path, overlay_output_path
+    return epic_image_path, None
 
 def generate_sketch(input_prompt, path, output_dir, image_index=0):
     with open(path, "rb") as input_image_file:
@@ -161,13 +191,14 @@ def generate_sketch(input_prompt, path, output_dir, image_index=0):
         )
     if output is None:
         print(f"Error: No output received for prompt: {input_prompt}")
-        return
+        return None
     for idx, image_url in enumerate(output):
         sketch_image_path = os.path.join(output_dir, f"sketch_{image_index}.png")
         save_image(image_url, sketch_image_path)
+        return sketch_image_path
+    return None
 
 def generate_images(overlay_path):
-    # Read the number of players from numPlayers.txt
     with open("numPlayers.txt", "r") as numplayers_file:
         num_players = int(numplayers_file.read())
         print("amount of pictures to generate: ", num_players)
@@ -176,20 +207,33 @@ def generate_images(overlay_path):
     output_dir_sketch = "sketch_pictures"
     os.makedirs(output_dir_epic, exist_ok=True)
     os.makedirs(output_dir_sketch, exist_ok=True)
-    
-    # Loop through each face image
+
+    current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    parent_folder_id = create_folder(current_time, PARENT_FOLDER_ID)
+    epic_folder_id = create_folder('epic', parent_folder_id)
+    sketch_folder_id = create_folder('sketch', parent_folder_id)
+
     for i in range(1, num_players + 1):
         image_path = f"face_{i}.jpg"
         print(image_path)
         found_description = check_person(image_path)
         full_prompt_epic = base_prompt_epic.format(description=found_description)
         print("epic prompt", i, " is ", full_prompt_epic)
-        #generate_image_with_retries(generate_epic, full_prompt_epic, image_path, "Cinematic", output_dir_epic, overlay_path, image_index=i)
-        #full_prompt_sketch = base_prompt_sketch.format(description=found_description)
-        #print("sketch prompt", i, " is ", full_prompt_sketch)
-        #generate_image_with_retries(generate_sketch, full_prompt_sketch, image_path, output_dir_sketch, image_index=i)
         
-    # Write to done.txt to indicate completion
+        epic_image_path, framed_image_path = generate_image_with_retries(generate_epic, full_prompt_epic, image_path, "Cinematic", output_dir_epic, overlay_path, image_index=i)
+        full_prompt_sketch = base_prompt_sketch.format(description=found_description)
+        print("sketch prompt", i, " is ", full_prompt_sketch)
+        sketch_image_path = generate_image_with_retries(generate_sketch, full_prompt_sketch, image_path, output_dir_sketch, image_index=i)
+        
+        # Upload generated images to Google Drive
+        if epic_image_path and os.path.exists(epic_image_path):
+            upload_file(epic_image_path, epic_folder_id)
+        if framed_image_path and os.path.exists(framed_image_path):
+            upload_file(framed_image_path, epic_folder_id)
+        
+        if sketch_image_path and os.path.exists(sketch_image_path):
+            upload_file(sketch_image_path, sketch_folder_id)
+
     with open("done.txt", "w") as done_file:
         print("updating done.txt")
         done_file.write("1")
