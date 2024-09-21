@@ -1,15 +1,12 @@
-// gcc -std=c++14 -g mqtt.cpp -o mqtt -lstdc++ -lmosquitto
-
-// mosquitto_sub -v -t '#'
-// https://cedalo.com/blog/mqtt-subscribe-publish-mosquitto-pub-sub-example/
-// mosquitto_pub -h localhost -t alch/FaceInator -m "{\"sender\":\"server\",\"numPlayers\":\"1\",\"method\":\"put\"}" -q 1
-// mosquitto_pub -h localhost -t alch/FaceInator -m "{\"sender\":\"server\", \"method\":\"put\", \"outputs\":[{\"id\":1, \"value\":1}]}" -q 1
-
-
 #include <iostream>
 #include <mosquitto.h>
 #include <fstream>
 #include <thread>
+#include <cstring>
+#include <ifaddrs.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #include "nlohmann/json.hpp"
 
 using json = nlohmann::json;
@@ -24,11 +21,11 @@ constexpr int IDLE = 0;
 constexpr int PROCESSING = 1;
 constexpr int DONE = 2;
 
-const char *broker_address = "10.0.0.10";
+const char *broker_address = "127.0.0.1";
 const int broker_port = 1883;
 const char *topic = "alch/faceinator";
 const char *serverTopic = "alch";
-char _cfg_name[] = "FaceInator";
+char _cfg_name[] = "faceinator";
 
 class FileHandler
 {
@@ -64,6 +61,7 @@ public:
         return value;
     }
 };
+
 class MosquittoClient
 {
 public:
@@ -91,6 +89,7 @@ public:
 
     ~MosquittoClient()
     {
+        sendDisconnectionMessage(); // Send disconnection message
         mosquitto_destroy(mosq);
         mosquitto_lib_cleanup();
     }
@@ -137,6 +136,67 @@ public:
             {"method", method},
             {"outputs", json::array({{{"id", id}, {"value", value}}})}};
         return message.dump();
+    }
+
+    static std::string getIPAddress()
+    {
+        struct ifaddrs *ifaddr, *ifa;
+        char ip[NI_MAXHOST];
+
+        if (getifaddrs(&ifaddr) == -1)
+        {
+            perror("getifaddrs");
+            exit(EXIT_FAILURE);
+        }
+
+        std::string ipAddress = "127.0.0.1"; // Default to localhost
+
+        for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next)
+        {
+            if (ifa->ifa_addr == nullptr)
+                continue;
+
+            int family = ifa->ifa_addr->sa_family;
+            if (family == AF_INET)
+            {
+                int s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), ip, NI_MAXHOST, nullptr, 0, NI_NUMERICHOST);
+                if (s != 0)
+                {
+                    std::cerr << "getnameinfo() failed: " << gai_strerror(s) << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                if (strcmp(ifa->ifa_name, "lo") != 0) // Skip loopback interface
+                {
+                    ipAddress = ip;
+                    break;
+                }
+            }
+        }
+
+        freeifaddrs(ifaddr);
+        return ipAddress;
+    }
+
+    void sendInfoMessage()
+    {
+        std::string ip = getIPAddress();
+        json message = {
+            {"sender", _cfg_name},
+            {"connected", true},
+            {"ip", ip},
+            {"version", "v0.1.0"},
+            {"method", "info"},
+            {"trigger", "startup"}};
+        publish(serverTopic, message.dump());
+    }
+
+    void sendDisconnectionMessage()
+    {
+        json message = {
+            {"sender", _cfg_name},
+            {"connected", false},
+            {"method", "info"}};
+        publish(serverTopic, message.dump());
     }
 
     static void message_callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *message)
@@ -201,28 +261,34 @@ public:
                 std::cout << "Value for key numPlayers: " << numberPlayers << std::endl;
                 FileHandler::writeToFile(numberPlayers, PLAYERSKEY);
             }
-            else
+            else if (data.contains("method") && data["method"] == "get" && data.contains("info") && data["info"] == "system")
             {
-                std::cout << "No 'outputs' key found or 'outputs' is not an array." << std::endl;
+                std::string ip = getIPAddress();
+                json message = {
+                    {"sender", _cfg_name},
+                    {"connected", true},
+                    {"ip", ip},
+                    {"version", "v0.1.0"},
+                    {"method", "info"},
+                    {"trigger", "request"}};
+                publish(serverTopic, message.dump());
+            }
+            else if (data.contains("method") && data["method"] == "put" && data.contains("outputs") && data["outputs"] == "reset")
+            {
+                std::cout << "Reset command received." << std::endl;
+                std::string message = makeMessage(_cfg_name, "info", 1, IDLE);
+                resetStates();
             }
         }
         catch (const std::exception &e)
         {
-            std::cerr << "Error parsing JSON: " << e.what() << std::endl;
+            std::cerr << "Error handling message: " << e.what() << std::endl;
         }
     }
 
-    static std::string getNumberPlayers() { return numberPlayers; }
-    static std::string getScanningComplete() { return scanningComplete; }
-    static std::string getGameStart() { return gameStart; }
-
-    static MosquittoClient *getInstance()
+    std::string getGameStart()
     {
-        if (!instance)
-        {
-            instance = new MosquittoClient();
-        }
-        return instance;
+        return gameStart;
     }
 
     void resetInternalValues()
@@ -232,6 +298,24 @@ public:
         gameStart = "0";
         PlayersHasBeenAsked = false;
         ScanningHasBeenInformed = false;
+    }
+
+    void resetStates()
+    {
+        resetInternalValues();
+        FileHandler::writeToFile("0", SCANNINGKEY);
+        FileHandler::writeToFile("0", PLAYERSKEY);
+        FileHandler::writeToFile("0", STARTKEY);
+        FileHandler::writeToFile("0", DONEKEY);
+    }
+
+    static MosquittoClient *getInstance()
+    {
+        if (!instance)
+        {
+            instance = new MosquittoClient();
+        }
+        return instance;
     }
 };
 
