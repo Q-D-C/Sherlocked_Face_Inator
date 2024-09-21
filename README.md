@@ -248,6 +248,7 @@ mosquitto &
 
 # Start the Python process
 source /home/pi/Sherlocked_Face_Inator/venv/bin/activate
+export REPLICATE_API_TOKEN=your_replicate_api_token_here
 python3 /home/pi/Sherlocked_Face_Inator/generatePerson.py
 ```
 
