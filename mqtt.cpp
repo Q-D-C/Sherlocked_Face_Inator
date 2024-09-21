@@ -24,10 +24,10 @@ constexpr int IDLE = 0;
 constexpr int PROCESSING = 1;
 constexpr int DONE = 2;
 
-const char *broker_address = "127.0.0.1";
+const char *broker_address = "10.0.0.10";
 const int broker_port = 1883;
-const char *topic = "alch/FaceInator";
-const char *serverTopic = "alch/server";
+const char *topic = "alch/faceinator";
+const char *serverTopic = "alch";
 char _cfg_name[] = "FaceInator";
 
 class FileHandler
