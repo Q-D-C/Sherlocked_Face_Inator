@@ -146,13 +146,15 @@ sudo nano /etc/samba/smb.conf
 At the bottom of the file, add the following configuration:
 
 ```ini
-[shared_folder]
+[FaceInator]
 path = /home/pi/Sherlocked_Face_Inator/pictures
+browseable = yes
 writeable = yes
+guest ok = yes
+force user = pi
 create mask = 0777
 directory mask = 0777
 public = yes
-guest ok = yes
 ```
 
 - path: The directory to be shared.
@@ -194,4 +196,85 @@ Connect to the folder using the steps above.
 Go to System Preferences > Users & Groups.
 Select your user and go to the Login Items tab.
 Drag the mounted shared folder from your desktop into the Login Items list.
+
+## Create and Enable Service for the Project
+Create a systemd service to manage the MQTT and OpenCV project files:
+
+```bash
+sudo nano /etc/systemd/system/face_inator.service
+```
+
+Add the following to the face_inator.service:
+
+```ini
+[Unit]
+Description=Run Sherlocked_Face_Inator at boot
+After=network.target
+
+[Service]
+ExecStart=/home/pi/Sherlocked_Face_Inator/start.sh
+WorkingDirectory=/home/pi/Sherlocked_Face_Inator
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+User=pi
+
+[Install]
+WantedBy=multi-user.target
+```
+
+- ExecStart: Path to a start.sh script that initiates the components.
+- Restart: Ensures the service automatically restarts if it fails.
+
+Create the start.sh Script. This script will handle starting necessary components like MQTT, OpenCV, and any other processes.
+
+```bash
+nano /home/pi/Sherlocked_Face_Inator/start.sh
+```
+
+Add the following content:
+
+```bash
+#!/bin/bash
+
+# Start the Mosquitto MQTT broker
+mosquitto &
+
+# Start the MQTT process
+/home/pi/Sherlocked_Face_Inator/mqtt &
+
+# Start the OpenCV process
+/home/pi/Sherlocked_Face_Inator/herken &
+
+# Start the Python process
+source /home/pi/Sherlocked_Face_Inator/venv/bin/activate
+python3 /home/pi/Sherlocked_Face_Inator/generatePerson.py
+```
+
+Make it executable:
+
+```bash
+chmod +x /home/pi/Sherlocked_Face_Inator/start.sh
+```
+
+Reload systemd and enable the new service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable face_inator.service
+sudo systemctl start face_inator.service
+sudo systemctl status face_inator.service
+```
+
+Schedule a daily reboot using cron:
+
+```bash
+sudo crontab -e
+```
+
+Add the following line to reboot the system at midnight:
+
+```bash
+0 0 * * * /sbin/reboot
+```
 
