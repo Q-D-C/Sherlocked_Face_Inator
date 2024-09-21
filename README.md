@@ -131,10 +131,10 @@ sudo apt install samba samba-common-bin -y
 Create a folder that will be shared across the network and set the appropriate permissions for the shared folder so that it can be accessed and modified by anyone:
 
 ```bash
-mkdir /pictures
+mkdir pictures
 mkdir pictures/epic_pictures
 mkdir pictures/sketch_pictures
-sudo chmod 777 /pictures
+sudo chmod 777 pictures
 ```
 
 Edit the Samba configuration file:
