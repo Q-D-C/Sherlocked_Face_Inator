@@ -119,3 +119,77 @@ sudo systemctl enable mosquitto
 sudo systemctl start mosquitto
 sudo systemctl status mosquitto
 ```
+
+## Set up Shared Folder
+
+Install the Samba package on your Raspberry Pi to enable file sharing:
+
+```bash
+sudo apt install samba samba-common-bin -y
+```
+
+Create a folder that will be shared across the network and set the appropriate permissions for the shared folder so that it can be accessed and modified by anyone:
+
+```bash
+mkdir ~/shared_folder
+sudo chmod 777 ~/shared_folder
+```
+
+Edit the Samba configuration file:
+
+```bash
+sudo nano /etc/samba/smb.conf
+```
+
+At the bottom of the file, add the following configuration:
+
+```ini
+[shared_folder]
+path = /home/pi/shared_folder
+writeable = yes
+create mask = 0777
+directory mask = 0777
+public = yes
+guest ok = yes
+```
+
+- path: The directory to be shared.
+- writeable: Allows users to write to the folder.
+- create mask and directory mask: Ensure files and directories are fully accessible.
+- public and guest ok: Allow guest access without requiring authentication.
+
+Save and close the file by pressing Ctrl + X, then Y, and press Enter.
+
+Restart the Samba service to apply the new configuration:
+
+```bash
+sudo systemctl restart smbd
+```
+
+You’ll need the Raspberry Pi’s IP address to access the shared folder:
+
+```bash
+hostname -I
+```
+Take note of the IP address (e.g., 192.168.1.50).
+
+On your macOS device:
+
+Open Finder.
+Press Cmd + K or go to Go > Connect to Server.
+Enter the following in the "Server Address" field:
+
+```bash
+smb://<your-raspberry-pi-ip-address>/shared_folder
+```
+
+Click Connect.
+Select Guest if prompted for a username and password.
+The shared folder will now appear in Finder, and you can read/write files to it.
+
+To automatically mount the shared folder on macOS every time you log in:
+Connect to the folder using the steps above.
+Go to System Preferences > Users & Groups.
+Select your user and go to the Login Items tab.
+Drag the mounted shared folder from your desktop into the Login Items list.
+
