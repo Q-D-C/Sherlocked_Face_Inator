@@ -131,10 +131,10 @@ sudo apt install samba samba-common-bin -y
 Create a folder that will be shared across the network and set the appropriate permissions for the shared folder so that it can be accessed and modified by anyone:
 
 ```bash
-mkdir ~/epic_pictures
-sudo chmod 777 ~/epic_pictures
-mkdir ~/sketch_pictures
-sudo chmod 777 ~/sketch_pictures
+mkdir /pictures
+mkdir pictures/epic_pictures
+mkdir pictures/sketch_pictures
+sudo chmod 777 /pictures
 ```
 
 Edit the Samba configuration file:
@@ -147,7 +147,7 @@ At the bottom of the file, add the following configuration:
 
 ```ini
 [shared_folder]
-path = /home/pi/shared_folder
+path = /home/pi/Sherlocked_Face_Inator/pictures
 writeable = yes
 create mask = 0777
 directory mask = 0777
