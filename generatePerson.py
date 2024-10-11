@@ -4,6 +4,7 @@ import os
 import requests
 from PIL import Image
 from replicate.exceptions import ModelError
+from datetime import datetime  # Import datetime for timestamp
 
 base_prompt_epic = "sketch of {description} img. dark, dramatic, low detail, dressed in alchemist clothes, looking serious"
 base_prompt_sketch = "a rough sketch of a {description} img, alchemist clothes, dressed as an alchemist, unrefined, with pencil strokes, solid background, magical setting, two colors"
@@ -137,11 +138,12 @@ def generate_epic(input_prompt, path, style, output_dir, overlay_path=None, imag
     if output is None:
         print(f"Error: No output received for prompt: {input_prompt}")
         return
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")  # Get current timestamp
     for idx, image_url in enumerate(output):
-        epic_image_path = os.path.join(output_dir, f"epic_{image_index}.png")
+        epic_image_path = os.path.join(output_dir, f"epic_{image_index}_{timestamp}.png")
         save_image(image_url, epic_image_path)
         if overlay_path:
-            overlay_output_path = os.path.join(output_dir, f"epic_framed_{image_index}.png")
+            overlay_output_path = os.path.join(output_dir, f"epic_framed_{image_index}_{timestamp}.png")
             overlay_image(epic_image_path, overlay_path, overlay_output_path)
 
 def generate_sketch(input_prompt, path, output_dir, image_index=0):
@@ -162,8 +164,9 @@ def generate_sketch(input_prompt, path, output_dir, image_index=0):
     if output is None:
         print(f"Error: No output received for prompt: {input_prompt}")
         return
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")  # Get current timestamp
     for idx, image_url in enumerate(output):
-        sketch_image_path = os.path.join(output_dir, f"sketch_{image_index}.png")
+        sketch_image_path = os.path.join(output_dir, f"sketch_{image_index}_{timestamp}.png")
         save_image(image_url, sketch_image_path)
 
 def generate_images(overlay_path):
@@ -172,8 +175,8 @@ def generate_images(overlay_path):
         num_players = int(numplayers_file.read())
         print("amount of pictures to generate: ", num_players)
     
-    output_dir_epic = "epic_pictures"
-    output_dir_sketch = "sketch_pictures"
+    output_dir_epic = "pictures/epic_pictures"
+    output_dir_sketch = "pictures/sketch_pictures"
     os.makedirs(output_dir_epic, exist_ok=True)
     os.makedirs(output_dir_sketch, exist_ok=True)
     
@@ -184,10 +187,10 @@ def generate_images(overlay_path):
         found_description = check_person(image_path)
         full_prompt_epic = base_prompt_epic.format(description=found_description)
         print("epic prompt", i, " is ", full_prompt_epic)
-        #generate_image_with_retries(generate_epic, full_prompt_epic, image_path, "Cinematic", output_dir_epic, overlay_path, image_index=i)
-        #full_prompt_sketch = base_prompt_sketch.format(description=found_description)
-        #print("sketch prompt", i, " is ", full_prompt_sketch)
-        #generate_image_with_retries(generate_sketch, full_prompt_sketch, image_path, output_dir_sketch, image_index=i)
+        generate_image_with_retries(generate_epic, full_prompt_epic, image_path, "Cinematic", output_dir_epic, overlay_path, image_index=i)
+        full_prompt_sketch = base_prompt_sketch.format(description=found_description)
+        print("sketch prompt", i, " is ", full_prompt_sketch)
+        generate_image_with_retries(generate_sketch, full_prompt_sketch, image_path, output_dir_sketch, image_index=i)
         
     # Write to done.txt to indicate completion
     with open("done.txt", "w") as done_file:

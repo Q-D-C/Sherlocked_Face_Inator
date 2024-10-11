@@ -1,3 +1,9 @@
+// mosquitto_sub -v -t '#'
+// https://cedalo.com/blog/mqtt-subscribe-publish-mosquitto-pub-sub-example/
+// mosquitto_pub -h localhost -t alch/faceinator -m "{\"sender\":\"server\",\"numPlayers\":\"3\",\"method\":\"put\"}" -q 1
+// mosquitto_pub -h localhost -t alch/faceinator -m "{\"sender\":\"server\",\"numPlayers\":\"1\",\"method\":\"put\"}" -q 1
+// mosquitto_pub -h localhost -t alch/faceinator -m "{\"sender\":\"server\", \"method\":\"put\", \"outputs\":[{\"id\":1, \"value\":1}]}" -q 1
+
 #include <iostream>
 #include <mosquitto.h>
 #include <fstream>
@@ -21,7 +27,7 @@ constexpr int IDLE = 0;
 constexpr int PROCESSING = 1;
 constexpr int DONE = 2;
 
-const char *broker_address = "127.0.0.1";
+const char *broker_address = "10.0.0.10";
 const int broker_port = 1883;
 const char *topic = "alch/faceinator";
 const char *serverTopic = "alch";
@@ -354,7 +360,7 @@ public:
             {"numPlayers", nullptr}, // Using nullptr to denote null in JSON
             {"method", "get"}};
         std::string messageStr = message.dump();                   // Serialize JSON object to string
-        MosquittoClient::publish(serverTopic, messageStr.c_str()); // Publish the JSON string
+        MosquittoClient::publish("alch/game", messageStr.c_str()); // Publish the JSON string
     }
 
     void checkScan()
