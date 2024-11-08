@@ -7,6 +7,9 @@
 # Unignore models folder
 !models
 
+# Unignore old folder
+!OLD
+
 # Prerequisites
 *.d
 
