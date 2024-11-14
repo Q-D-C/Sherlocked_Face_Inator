@@ -1,9 +1,31 @@
+# source venv/bin/activate
+# mosquitto_sub -v -t '#'
+# https://cedalo.com/blog/mqtt-subscribe-publish-mosquitto-pub-sub-example/
+# mosquitto_pub -h localhost -t alch/faceinator -m "{\"sender\":\"server\",\"numPlayers\":\"3\",\"method\":\"put\"}" -q 1
+# mosquitto_pub -h localhost -t alch/faceinator -m "{\"sender\":\"server\",\"numPlayers\":\"1\",\"method\":\"put\"}" -q 1
+# mosquitto_pub -h localhost -t alch/faceinator -m "{\"sender\":\"server\", \"method\":\"put\", \"outputs\":[{\"id\":1, \"value\":1}]}" -q 1
+
+
 import cv2
 import json
 import socket
 import paho.mqtt.client as mqtt
 import threading
 import time
+import os
+import numpy as np
+
+# YOLO Model Configurations
+YOLO_CONFIG_PATH = "models/yolov4-tiny-3l.cfg"          # Path to the YOLOv4 config file
+YOLO_WEIGHTS_PATH = "models/yolov4-tiny-3l_best.weights"     # Path to the YOLOv4 weights file
+YOLO_CONFIDENCE_THRESHOLD = 0.5          # Confidence threshold to filter weak detections
+YOLO_NMS_THRESHOLD = 0.4                 # Non-Maximum Suppression threshold
+
+BLURRYNESS_THRESHOLD = 2000.0  # Define a suitable threshold for blurriness
+
+# Flag to control whether detection is active
+detection_active = False
+detection_completed = False
 
 camera_active = False
 camera_lock = threading.Lock()
@@ -191,11 +213,17 @@ def on_disconnect(client, userdata, rc):
 
 #### START OF OPENCV ####
 
-# Flag to control whether detection is active
-detection_active = False
-detection_completed = False
+def load_yolo_model():
+    """
+    Load the YOLO model from the configuration and weights files.
+    """
+    net = cv2.dnn.readNetFromDarknet(YOLO_CONFIG_PATH, YOLO_WEIGHTS_PATH)
+    net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+    net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+    return net
 
-BLURRYNESS_THRESHOLD = 100.0  # Define a suitable threshold for blurriness
+# Initialize the YOLO model
+yolo_net = load_yolo_model()
 
 def check_blurriness(image):
     """
@@ -215,20 +243,32 @@ def check_blurriness(image):
 
     return variance
 
+def get_output_names(net):
+    """
+    Get the names of the output layers of the network.
+    """
+    layer_names = net.getLayerNames()
+    try:
+        # If getUnconnectedOutLayers() returns a list of lists
+        output_layers = net.getUnconnectedOutLayers()
+        if isinstance(output_layers, np.ndarray):
+            output_layers = output_layers.flatten().tolist()
+        output_names = [layer_names[i - 1] for i in output_layers]
+    except TypeError:
+        # If getUnconnectedOutLayers() returns a single integer or behaves differently
+        output_layers = net.getUnconnectedOutLayers()
+        if isinstance(output_layers, np.ndarray):
+            output_names = [layer_names[i[0] - 1] for i in output_layers]
+        else:
+            output_names = [layer_names[output_layers - 1]]
+    
+    return output_names
+
+
 def camera_loop():
     global camera_active, detection_active, detection_completed, numberPlayers
 
     print("Starting camera loop...")
-
-    # Load the pre-trained Haar Cascade for face detection
-    try:
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        if face_cascade.empty():
-            print("Error: Could not load Haar Cascade. Please check if the XML file is available.")
-            return
-    except Exception as e:
-        print(f"Error initializing Haar Cascade: {e}")
-        return
 
     # Open the camera
     print("Attempting to open the camera...")
@@ -251,36 +291,60 @@ def camera_loop():
             break
 
         if detection_active:
-            # Convert to grayscale for face detection
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # Prepare the frame for YOLO
+            blob = cv2.dnn.blobFromImage(frame, 1 / 255.0, (416, 416), [0, 0, 0], swapRB=True, crop=False)
+            yolo_net.setInput(blob)
+            
+            # Perform forward pass to get the YOLO detections
+            outs = yolo_net.forward(get_output_names(yolo_net))
 
-            # Detect faces in the frame
-            try:
-                faces = face_cascade.detectMultiScale(
-                    gray,
-                    scaleFactor=1.1,  # Lower scaleFactor to detect more potential faces
-                    minNeighbors=8,   # Increase minNeighbors to reduce false positives
-                    minSize=(50, 50)  # Minimum size for a face to be considered
-                )
-                print(f"Faces detected: {len(faces)}")
-            except Exception as e:
-                print(f"Error during face detection: {e}")
-                detection_active = False
-                continue
+            # Extract bounding boxes from YOLO detections
+            frame_height, frame_width = frame.shape[:2]
+            class_ids = []
+            confidences = []
+            boxes = []
 
-            if len(faces) > 0:
+            for out in outs:
+                for detection in out:
+                    scores = detection[5:]
+                    class_id = np.argmax(scores)
+                    confidence = scores[class_id]
+
+                    # Only consider detections with confidence above the threshold
+                    if confidence > YOLO_CONFIDENCE_THRESHOLD:
+                        center_x = int(detection[0] * frame_width)
+                        center_y = int(detection[1] * frame_height)
+                        width = int(detection[2] * frame_width)
+                        height = int(detection[3] * frame_height)
+                        x = int(center_x - width / 2)
+                        y = int(center_y - height / 2)
+
+                        # Adding padding to the bounding box
+                        x_start = max(x - padding, 0)
+                        y_start = max(y - padding, 0)
+                        x_end = min(x + width + padding, frame_width)
+                        y_end = min(y + height + padding, frame_height)
+
+                        boxes.append([x_start, y_start, x_end - x_start, y_end - y_start])
+                        confidences.append(float(confidence))
+                        class_ids.append(class_id)
+
+            # Apply Non-Maximum Suppression to filter overlapping boxes
+            indices = cv2.dnn.NMSBoxes(boxes, confidences, YOLO_CONFIDENCE_THRESHOLD, YOLO_NMS_THRESHOLD)
+
+            if len(indices) > 0:
                 print(f"Looking for {numberPlayers} amount of faces")
-                for i, (x, y, w, h) in enumerate(faces):
-                    # Add padding to the face region
-                    x_start = max(x - padding, 0)
-                    y_start = max(y - padding, 0)
-                    x_end = min(x + w + padding, frame.shape[1])
-                    y_end = min(y + h + padding, frame.shape[0])
-
-                    # Extract the face ROI with padding
-                    face = frame[y_start:y_end, x_start:x_end]
+                for i in indices.flatten():
+                    x, y, w, h = boxes[i]
                     
-                    # Draw rectangle around detected face (for visualization)
+                    # Extract the face ROI
+                    x_start = max(x, 0)
+                    y_start = max(y, 0)
+                    x_end = min(x + w, frame_width)
+                    y_end = min(y + h, frame_height)
+                    face = frame[y_start:y_end, x_start:x_end]
+
+                    # Draw a rectangle around the detected face for visualization
                     cv2.rectangle(frame, (x_start, y_start), (x_end, y_end), (255, 0, 0), 2)
 
                     face_filename = f"face_{face_count}.jpg"
@@ -377,6 +441,11 @@ def stop_detection():
 
 #### END OF OPENCV ####
 
+#### START OF AI ####
+
+#### END OF AI ####
+
+#### START OF MAIN LOOP ####
 
 
 # Create an MQTT client instance
