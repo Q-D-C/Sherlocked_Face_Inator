@@ -13,6 +13,29 @@ import threading
 import time
 import os
 import numpy as np
+import replicate
+import requests
+from PIL import Image
+from replicate.exceptions import ModelError
+from datetime import datetime  # Import datetime for timestamp
+
+# Base prompts for generating AI-enhanced images
+base_prompt_epic = "sketch of {description} img. dark, dramatic, low detail, dressed in alchemist clothes, looking serious"
+base_prompt_sketch = "a rough sketch of a {description} img, alchemist clothes, dressed as an alchemist, unrefined, with pencil strokes, solid background, magical setting, two colors"
+
+# Define the number of retries for generating images
+MAX_RETRIES = 5  # The number of times to retry if the image generation fails
+
+# Replicate API Token
+REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "[THIS IS A PRETEND TOKEN DO NOT USE THIS ONE THANK YOUS]")  # Replace this with your actual token
+
+if not REPLICATE_API_TOKEN or REPLICATE_API_TOKEN == "YOUR_REPLICATE_API_TOKEN":
+    raise ValueError("Please set the REPLICATE_API_TOKEN environment variable to a valid token.")
+
+# Set up replicate client authentication using the token
+os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
+
+overlay_path = "frame.png"  # Path to the overlay image
 
 # YOLO Model Configurations
 YOLO_CONFIG_PATH = "models/yolov4-tiny-3l.cfg"          # Path to the YOLOv4 config file
@@ -450,30 +473,6 @@ def stop_detection():
 
 #### START OF AI ####
 
-import replicate
-import time
-import os
-import requests
-from PIL import Image
-from replicate.exceptions import ModelError
-from datetime import datetime  # Import datetime for timestamp
-
-# Base prompts for generating AI-enhanced images
-base_prompt_epic = "sketch of {description} img. dark, dramatic, low detail, dressed in alchemist clothes, looking serious"
-base_prompt_sketch = "a rough sketch of a {description} img, alchemist clothes, dressed as an alchemist, unrefined, with pencil strokes, solid background, magical setting, two colors"
-
-# Define the number of retries for generating images
-MAX_RETRIES = 5  # The number of times to retry if the image generation fails
-
-# Replicate API Token
-REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "[THIS IS A PRETEND TOKEN DO NOT USE THIS ONE THANK YOUS]")  # Replace this with your actual token
-
-if not REPLICATE_API_TOKEN or REPLICATE_API_TOKEN == "YOUR_REPLICATE_API_TOKEN":
-    raise ValueError("Please set the REPLICATE_API_TOKEN environment variable to a valid token.")
-
-# Set up replicate client authentication using the token
-os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
-
 # Function to check if the person in the image wears glasses
 def hasGlasses(path):
     with open(path, "rb") as image_file:
@@ -592,6 +591,33 @@ def generate_epic(input_prompt, path, style, output_dir, image_index=0):
     for idx, image_url in enumerate(output):
         epic_image_path = os.path.join(output_dir, f"epic_{image_index}_{timestamp}.png")
         save_image(image_url, epic_image_path)
+        if overlay_path:
+            overlay_output_path = os.path.join(output_dir, f"epic_framed_{image_index}_{timestamp}.png")
+            overlay_image(epic_image_path, overlay_path, overlay_output_path)
+        
+        
+def generate_sketch(input_prompt, path, output_dir, image_index=0):
+    with open(path, "rb") as input_image_file:
+        output = replicate.run(
+            "tencentarc/photomaker:ddfc2b08d209f9fa8c1eca692712918bd449f695dabb4a958da31802a9570fe4",
+            input={
+                "prompt": input_prompt,
+                "num_steps": 50,
+                "style_name": "(No style)",
+                "input_image": input_image_file,
+                "num_outputs": 1,
+                "guidance_scale": 3,
+                "negative_prompt": "text, nsfw, realistic, refined, hat, wand, bad anatomy, big breasts, bad hands, text, wizard hat, error, missing fingers, extra digit, fewer digits, cropped, jpeg artifacts, signature, watermark, username, blurry, nude, hats, wizard hats",
+                "style_strength_ratio": 30
+            }
+        )
+    if output is None:
+        print(f"Error: No output received for prompt: {input_prompt}")
+        return
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")  # Get current timestamp
+    for idx, image_url in enumerate(output):
+        sketch_image_path = os.path.join(output_dir, f"sketch_{image_index}_{timestamp}.png")
+        save_image(image_url, sketch_image_path)
 
 # Function to generate images after face detection
 def generate_images():
@@ -612,14 +638,12 @@ def generate_images():
         
         full_prompt_sketch = base_prompt_sketch.format(description=found_description)
         print(f"Generating sketch image for face {i} with prompt: {full_prompt_sketch}")
-        generate_image_with_retries(generate_epic, full_prompt_sketch, image_path, "(No style)", output_dir_sketch, image_index=i)
+        generate_image_with_retries(generate_sketch, full_prompt_sketch, image_path, "(No style)", output_dir_sketch, image_index=i)
 
 	# After successfully generating images, reset internal states and send reset message
     reset_states()
 
 #### END OF AI ####
-
-
 
 #### START OF MAIN LOOP ####
 
