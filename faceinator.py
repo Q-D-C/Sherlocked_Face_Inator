@@ -4,6 +4,7 @@
 # mosquitto_pub -h localhost -t alch/faceinator -m "{\"sender\":\"server\",\"numPlayers\":\"3\",\"method\":\"put\"}" -q 1
 # mosquitto_pub -h localhost -t alch/faceinator -m "{\"sender\":\"server\",\"numPlayers\":\"1\",\"method\":\"put\"}" -q 1
 # mosquitto_pub -h localhost -t alch/faceinator -m "{\"sender\":\"server\", \"method\":\"put\", \"outputs\":[{\"id\":1, \"value\":1}]}" -q 1
+# mosquitto_pub -h localhost -t alch/faceinator -m "{\"sender\":\"server\", \"method\":\"put\", \"outputs\":\"reset\"}" -q 1
 
 import cv2
 import json
@@ -553,6 +554,33 @@ def save_image(url, path):
     response = requests.get(url)
     with open(path, 'wb') as file:
         file.write(response.content)
+        
+# Function to overlay one image on top of another
+def overlay_image(background_path, overlay_path, output_path, position=(0, 0)):
+    """
+    This function overlays one image on top of another image.
+    :param background_path: Path to the background image.
+    :param overlay_path: Path to the overlay image (with transparency).
+    :param output_path: Path where the output image will be saved.
+    :param position: Tuple specifying the position where the overlay should be placed.
+    """
+    try:
+        # Open both the background and overlay images
+        background = Image.open(background_path).convert("RGBA")
+        overlay = Image.open(overlay_path).convert("RGBA")
+
+        # Resize the overlay to fit within the background, if needed
+        overlay = overlay.resize((background.size[0], background.size[1]), Image.ANTIALIAS)
+
+        # Overlay the image
+        background.paste(overlay, position, overlay)
+
+        # Save the output image
+        background.save(output_path, format="PNG")
+    except Exception as e:
+        print(f"Error overlaying images: {e}")
+
+
 
 # Function to generate an AI-enhanced image based on a prompt
 def generate_image_with_retries(generate_function, *args, **kwargs):
@@ -638,7 +666,7 @@ def generate_images():
         
         full_prompt_sketch = base_prompt_sketch.format(description=found_description)
         print(f"Generating sketch image for face {i} with prompt: {full_prompt_sketch}")
-        generate_image_with_retries(generate_sketch, full_prompt_sketch, image_path, "(No style)", output_dir_sketch, image_index=i)
+        generate_image_with_retries(generate_sketch, full_prompt_sketch, image_path, output_dir_sketch, image_index=i)
 
 	# After successfully generating images, reset internal states and send reset message
     reset_states()
