@@ -5,7 +5,6 @@
 # mosquitto_pub -h localhost -t alch/faceinator -m "{\"sender\":\"server\",\"numPlayers\":\"1\",\"method\":\"put\"}" -q 1
 # mosquitto_pub -h localhost -t alch/faceinator -m "{\"sender\":\"server\", \"method\":\"put\", \"outputs\":[{\"id\":1, \"value\":1}]}" -q 1
 
-
 import cv2
 import json
 import socket
@@ -21,7 +20,7 @@ YOLO_WEIGHTS_PATH = "models/yolov4-tiny-3l_best.weights"     # Path to the YOLOv
 YOLO_CONFIDENCE_THRESHOLD = 0.5          # Confidence threshold to filter weak detections
 YOLO_NMS_THRESHOLD = 0.4                 # Non-Maximum Suppression threshold
 
-BLURRYNESS_THRESHOLD = 2000.0  # Define a suitable threshold for blurriness
+BLURRYNESS_THRESHOLD = 1500.0  # Define a suitable threshold for blurriness
 
 # Flag to control whether detection is active
 detection_active = False
@@ -34,7 +33,7 @@ BROKER_ADDRESS = "localhost"  # Use your broker address
 PORT = 1883  # The default MQTT port, adjust as needed
 TOPIC_SUBSCRIBE = "alch/faceinator"
 TOPIC_PUBLISH = "alch"
-serverTopic = "alch"
+serverTopic = "alch/faceinator"
 _cfg_name = "faceinator"
 gameStart = ""
 numberPlayers = 0  # Use int type for easier processing
@@ -155,7 +154,7 @@ def handle_message(data):
             print("Reset command received.")
             message = make_message(_cfg_name, "info", 1, 0)
             client.publish(serverTopic, message)
-            reset_states()
+            #reset_states()
 
     except Exception as e:
         print(f"Error handling message: {e}")
@@ -167,6 +166,9 @@ def reset_states():
     numberPlayers = 0
     detection_active = False
     detection_completed = False
+    message = make_message(_cfg_name, "info", 1, 0)
+    client.publish(serverTopic, message)
+    print(f"Reset state message sent: {message}")
     print("States have been reset.")
         
         # Called when the client connects to the broker
@@ -398,13 +400,18 @@ def camera_loop():
                         detection_active = True
                     else:
                         print("All captured faces are clear.")
+                        # Send MQTT message to indicate generation is in progress
+                        message = make_message(_cfg_name, "info", 1, 2)
+                        client.publish(serverTopic, message)
+                        print(f"Generation in progress message sent: {message}")
+                        generate_images()
 
         # Display the frame (comment out if running headless)
-        try:
-            cv2.imshow('Face Detection', frame)
-        except Exception as e:
-            print(f"Error displaying frame: {e}")
-            break
+        #try:
+        #    cv2.imshow('Face Detection', frame)
+        #except Exception as e:
+        #    print(f"Error displaying frame: {e}")
+        #    break
 
         # Stop if 'q' is pressed
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -443,10 +450,178 @@ def stop_detection():
 
 #### START OF AI ####
 
+import replicate
+import time
+import os
+import requests
+from PIL import Image
+from replicate.exceptions import ModelError
+from datetime import datetime  # Import datetime for timestamp
+
+# Base prompts for generating AI-enhanced images
+base_prompt_epic = "sketch of {description} img. dark, dramatic, low detail, dressed in alchemist clothes, looking serious"
+base_prompt_sketch = "a rough sketch of a {description} img, alchemist clothes, dressed as an alchemist, unrefined, with pencil strokes, solid background, magical setting, two colors"
+
+# Define the number of retries for generating images
+MAX_RETRIES = 5  # The number of times to retry if the image generation fails
+
+# Replicate API Token
+REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "[THIS IS A PRETEND TOKEN DO NOT USE THIS ONE THANK YOUS]")  # Replace this with your actual token
+
+if not REPLICATE_API_TOKEN or REPLICATE_API_TOKEN == "YOUR_REPLICATE_API_TOKEN":
+    raise ValueError("Please set the REPLICATE_API_TOKEN environment variable to a valid token.")
+
+# Set up replicate client authentication using the token
+os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
+
+# Function to check if the person in the image wears glasses
+def hasGlasses(path):
+    with open(path, "rb") as image_file:
+        output = replicate.run(
+            "andreasjansson/blip-2:f677695e5e89f8b236e52ecd1d3f01beb44c34606419bcc19345e046d8f786f9",
+            input={
+                "image": image_file,
+                "caption": False,
+                "context": "there is one person",
+                "question": "does this person wear glasses, yes or no",
+                "temperature": 1,
+                "use_nucleus_sampling": False
+            }
+        )
+    return output
+
+# Function to identify the type of person in the image
+def whatPerson(path):
+    with open(path, "rb") as image_file:
+        output = replicate.run(
+            "andreasjansson/blip-2:f677695e5e89f8b236e52ecd1d3f01beb44c34606419bcc19345e046d8f786f9",
+            input={
+                "image": image_file,
+                "caption": False,
+                "context": "there is one person",
+                "question": "what kind of person is in the picture",
+                "temperature": 1,
+                "use_nucleus_sampling": False
+            }
+        )
+    return output
+
+def whatHair(path):
+    with open(path, "rb") as image_file:
+        output = replicate.run(
+            "andreasjansson/blip-2:f677695e5e89f8b236e52ecd1d3f01beb44c34606419bcc19345e046d8f786f9",
+            input={
+                "image": image_file,
+                "caption": False,
+                "context": "there is one person",
+                "question": "what is this person's hair color and length",
+                "temperature": 1,
+                "use_nucleus_sampling": False
+            }
+        )
+    return output
+
+def whatEye(path):
+    with open(path, "rb") as image_file:
+        output = replicate.run(
+            "andreasjansson/blip-2:f677695e5e89f8b236e52ecd1d3f01beb44c34606419bcc19345e046d8f786f9",
+            input={
+                "image": image_file,
+                "caption": False,
+                "context": "there is one person",
+                "question": "What is this person's eye color",
+                "temperature": 1,
+                "use_nucleus_sampling": False
+            }
+        )
+    return output
+
+# Function to check and update the person description based on information
+def check_person(path):
+    glasses = hasGlasses(path)  # Check if the person in the image has glasses
+    person = whatPerson(path)  # Get the description of the person
+    hair = whatHair(path)
+    eye = whatEye(path)
+    
+    if 'glasses' not in person.lower() and glasses == "yes":
+        person += " with glasses"
+    person += f" with {hair} and {eye} eyes"
+    
+    return person
+
+# Function to save an image from a URL to a local path
+def save_image(url, path):
+    response = requests.get(url)
+    with open(path, 'wb') as file:
+        file.write(response.content)
+
+# Function to generate an AI-enhanced image based on a prompt
+def generate_image_with_retries(generate_function, *args, **kwargs):
+    retries = 0
+    while retries < MAX_RETRIES:
+        try:
+            generate_function(*args, **kwargs)
+            break
+        except ModelError as e:
+            print(f"Error: {e}. Retrying... ({retries + 1}/{MAX_RETRIES})")
+            retries += 1
+            time.sleep(2)
+    else:
+        print("Failed to generate image after several retries.")
+
+# Function to generate an image based on the given prompt and style
+def generate_epic(input_prompt, path, style, output_dir, image_index=0):
+    with open(path, "rb") as input_image_file:
+        output = replicate.run(
+            "tencentarc/photomaker-style:467d062309da518648ba89d226490e02b8ed09b5abc15026e54e31c5a8cd0769",
+            input={
+                "prompt": input_prompt,
+                "num_steps": 50,
+                "style_name": style,
+                "input_image": input_image_file,
+                "num_outputs": 1,
+                "guidance_scale": 5,
+                "negative_prompt": "realistic, photo-realistic, worst quality, greyscale, bad anatomy, bad hands, error, text, hat, wizard hat",
+                "style_strength_ratio": 35
+            }
+        )
+    if output is None:
+        print(f"Error: No output received for prompt: {input_prompt}")
+        return
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")  # Get current timestamp
+    for idx, image_url in enumerate(output):
+        epic_image_path = os.path.join(output_dir, f"epic_{image_index}_{timestamp}.png")
+        save_image(image_url, epic_image_path)
+
+# Function to generate images after face detection
+def generate_images():
+    output_dir_epic = "pictures/epic_pictures"
+    output_dir_sketch = "pictures/sketch_pictures"
+    os.makedirs(output_dir_epic, exist_ok=True)
+    os.makedirs(output_dir_sketch, exist_ok=True)
+    
+    # Loop through each face image and generate AI-enhanced images
+    for i in range(numberPlayers):
+        image_path = f"face_{i}.jpg"
+        found_description = check_person(image_path)
+        
+        # Generate Epic and Sketch Images
+        full_prompt_epic = base_prompt_epic.format(description=found_description)
+        print(f"Generating epic image for face {i} with prompt: {full_prompt_epic}")
+        generate_image_with_retries(generate_epic, full_prompt_epic, image_path, "Cinematic", output_dir_epic, image_index=i)
+        
+        full_prompt_sketch = base_prompt_sketch.format(description=found_description)
+        print(f"Generating sketch image for face {i} with prompt: {full_prompt_sketch}")
+        generate_image_with_retries(generate_epic, full_prompt_sketch, image_path, "(No style)", output_dir_sketch, image_index=i)
+
+	# After successfully generating images, reset internal states and send reset message
+    reset_states()
+
 #### END OF AI ####
 
-#### START OF MAIN LOOP ####
 
+
+#### START OF MAIN LOOP ####
 
 # Create an MQTT client instance
 client = mqtt.Client("PythonClient")
@@ -467,6 +642,10 @@ except Exception as e:
 # Start a background loop that listens for messages and handles reconnections
 client.loop_start()
 start_camera_loop()
+
+# Tell server we are ready to rumble
+message = make_message(_cfg_name, "info", 1, 0)
+client.publish(serverTopic, message)
 
 # Main loop for processing 
 try:
