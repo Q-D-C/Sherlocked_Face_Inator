@@ -72,13 +72,14 @@ def generate_with_retries(generate_function, *args, **kwargs):
 
 # Main function
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python3 generateVIP.py [style] [path_to_image] [description]")
+    if len(sys.argv) < 4:
+        print("Usage: python3 generateVIP.py [style] [num_images] [path_to_image] [description]")
         sys.exit(1)
 
     style = sys.argv[1].lower()
-    image_path = sys.argv[2]
-    description = sys.argv[3] if len(sys.argv) > 3 else "a mysterious alchemist"
+    num_images = int(sys.argv[2]) if sys.argv[2].isdigit() else 1  # Default to 1 if invalid
+    image_path = sys.argv[3]
+    description = sys.argv[4] if len(sys.argv) > 4 else "a mysterious alchemist"
 
     # Validate inputs
     if style not in ["epic", "sketch"]:
@@ -99,20 +100,19 @@ def main():
     input_dir = os.path.dirname(image_path)
     input_name, input_ext = os.path.splitext(os.path.basename(image_path))
 
-    # Define output file path
+    # Generate the specified number of images
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_filename = f"{input_name}_{style}_{timestamp}.png"
-    output_path = os.path.join(input_dir, output_filename)
+    for i in range(1, num_images + 1):
+        output_filename = f"{input_name}_{style}_{timestamp}_v{i}.png"
+        output_path = os.path.join(input_dir, output_filename)
 
-    # Generate the image
-    if style == "epic":
-        generate_with_retries(generate_epic, prompt, image_path, output_path)
-        print(prompt)
-    else:  # style == "sketch"
-        generate_with_retries(generate_sketch, prompt, image_path, output_path)
-        print(prompt)
+        # Generate the image
+        if style == "epic":
+            generate_with_retries(generate_epic, prompt, image_path, output_path)
+        else:  # style == "sketch"
+            generate_with_retries(generate_sketch, prompt, image_path, output_path)
 
-    print(f"Generated {style} image saved to {output_path}")
+        print(f"Generated {style} image saved to {output_path}")
 
 if __name__ == "__main__":
     main()
