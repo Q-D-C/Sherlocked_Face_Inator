@@ -7,7 +7,7 @@ import requests
 
 # Constants for prompts
 BASE_PROMPT_EPIC = "sketch of {description} img. dark, dramatic, low detail, dressed in alchemist clothes, looking serious"
-BASE_PROMPT_SKETCH = "a rough sketch of  {description} img, alchemist clothes, dressed as an alchemist, unrefined, with pencil strokes, solid background, magical setting, two colors"
+BASE_PROMPT_SKETCH = "a rough sketch of {description} img, alchemist clothes, dressed as an alchemist, unrefined, with pencil strokes, solid background, magical setting, two colors"
 MAX_RETRIES = 5
 
 # Function to save an image from a URL to a local path
@@ -95,19 +95,22 @@ def main():
     else:  # style == "sketch"
         prompt = BASE_PROMPT_SKETCH.format(description=description)
 
-    # Create output directory
-    output_dir = "output_images"
-    os.makedirs(output_dir, exist_ok=True)
+    # Define output directory as the same directory as the input image
+    input_dir = os.path.dirname(image_path)
+    input_name, input_ext = os.path.splitext(os.path.basename(image_path))
 
     # Define output file path
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = os.path.join(output_dir, f"{style}_{timestamp}.png")
+    output_filename = f"{input_name}_{style}_{timestamp}.png"
+    output_path = os.path.join(input_dir, output_filename)
 
     # Generate the image
     if style == "epic":
         generate_with_retries(generate_epic, prompt, image_path, output_path)
+        print(prompt)
     else:  # style == "sketch"
         generate_with_retries(generate_sketch, prompt, image_path, output_path)
+        print(prompt)
 
     print(f"Generated {style} image saved to {output_path}")
 
