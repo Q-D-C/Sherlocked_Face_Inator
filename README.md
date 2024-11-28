@@ -1,3 +1,41 @@
+# For manual generation
+
+Clone the Sherlocked_Face_Inator Repository, or just download generateVIP.py
+
+```sh
+git clone https://github.com/Q-D-C/Sherlocked_Face_Inator.git
+cd Sherlocked_Face_Inator
+```
+## Install the required Python packages:
+
+```sh
+pip3 install replicate requests pillow
+```
+
+## Set Up Replicate API
+
+To use the Replicate API, you need an API token. Follow these steps to set it up:
+
+To use the Replicate API, you need an API token. Follow these steps to set it up:
+
+1. Sign up for a Replicate account at [replicate.com](https://replicate.com/).
+2. Obtain your API token from the [API token page](https://replicate.com/account/api-tokens).
+
+```sh
+export REPLICATE_API_TOKEN=your_replicate_api_token_here 
+```
+
+your_replicate_api_token_here with your actual API token.
+
+## How to use
+
+```sh
+python3 generateVIP.py [style] [path_to_image] [description]
+```
+
+# For full automated system
+
+
 ## Configure WiFi Networks on Static IP
 
 ### If Setting Up at the Location:
