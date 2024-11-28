@@ -30,11 +30,15 @@ your_replicate_api_token_here with your actual API token.
 ## How to use
 
 ```sh
-python3 generateVIP.py [style] [path_to_image] [description]
+python3 generateVIP.py [style] [amount] [path_to_image] "[description]"
 ```
 
-# For full automated system
+- style: choose between either the epic version or sketch version
+- amount: the amount of pictures you want generated in one go (defaults to 1)
+- path: to input image, it will output to the same folder and add the input file name to the output to keep organised
+- description: add a specific description about the person to the default description (defaults to "a mysterious alchemist")
 
+# For full automated system
 
 ## Configure WiFi Networks on Static IP
 
